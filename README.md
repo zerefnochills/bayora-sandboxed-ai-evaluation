@@ -27,7 +27,8 @@ resolve from inside these containers even though routing itself is fine.
 
 ```bash
 # 1. generate secrets (each tenant only ever receives its own token)
-{ for k in RED_TOKEN BLUE_TOKEN ADMIN_TOKEN; do echo "$k=$(openssl rand -hex 24)"; done; echo "SANDBOX_RUNTIME=runsc"; } > .env
+pip install --break-system-packages pyjwt   # once, on the VM
+python3 scripts/setup_env.py            # writes .env (JWT_SECRET + 3 scoped tokens, 12h)
 
 # 2. build and start
 docker compose up -d --build
@@ -38,6 +39,9 @@ docker inspect -f '{{.HostConfig.Runtime}}' bayora-red-1     # -> runsc
 
 # 4. run the isolation + policy + audit checks
 bash tests/isolation_test.sh
+
+# 5. prove cgroup limits actually cap a noisy tenant (takes ~10s)
+bash tests/fairness_test.sh
 ```
 
 If a container won't start under gVisor, set `SANDBOX_RUNTIME=runc` in `.env`
@@ -65,7 +69,10 @@ container, so it isn't affected by the DNS issue above — only requests
 ## Known limits (go in the threat model)
 
 - Test state lives in gateway memory; audit log persists in a volume.
-- Static bearer tokens are a placeholder; week 2 = scoped JWT/ABAC.
+- Tokens are scoped, signed JWTs (HS256, one shared secret) with a 12h
+  default lifetime — real ABAC now, not just per-tenant role names. One
+  trust root for the PoC: a production version would give each tenant its
+  own signing identity so one can be revoked without re-minting the others.
 - gateway joins `admin-net` (has egress) only to publish 127.0.0.1:8080.
 - Audit chain detects edits, not a full-file rewrite or tail truncation.
 - No timing/padding mitigation yet (side-channel work, week 3).

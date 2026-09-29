@@ -24,6 +24,7 @@ services:
     <<: *hardening
     build: ./gateway
     environment:
+      - JWT_SECRET=${JWT_SECRET:?set in .env}
       - RED_TOKEN=${RED_TOKEN:?set in .env}
       - BLUE_TOKEN=${BLUE_TOKEN:?set in .env}
       - ADMIN_TOKEN=${ADMIN_TOKEN:?set in .env}
