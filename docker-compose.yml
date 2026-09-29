@@ -1,0 +1,95 @@
+name: bayora
+
+# Shared hardening for every container: gVisor runtime, read-only rootfs,
+# no capabilities, no privilege escalation, bounded process count.
+x-hardening: &hardening
+  runtime: ${SANDBOX_RUNTIME:-runsc}
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 128
+  tmpfs: ["/tmp"]
+
+# gVisor's default (sandboxed) netstack does not support Docker's embedded
+# DNS server at 127.0.0.11 - service-name lookups fail with "Temporary
+# failure in name resolution" even though routing itself works fine. Rather
+# than switch to `runsc --network=host` (which would hand network syscalls
+# straight to the host kernel and weaken exactly the isolation gVisor is
+# there for), every service gets a fixed IP per network below, so nothing
+# needs DNS at all. Addresses are pinned via each network's subnet + each
+# service's ipv4_address, so they're deterministic across every rebuild -
+# this is a config decision, not a value copied out of `docker inspect`.
+services:
+  gateway:
+    <<: *hardening
+    build: ./gateway
+    environment:
+      - RED_TOKEN=${RED_TOKEN:?set in .env}
+      - BLUE_TOKEN=${BLUE_TOKEN:?set in .env}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?set in .env}
+      - LLM_URL=http://172.28.3.2:8000
+    volumes:
+      - audit-data:/data
+    networks:
+      red-net:   {ipv4_address: 172.28.1.2}
+      blue-net:  {ipv4_address: 172.28.2.2}
+      model-net: {ipv4_address: 172.28.3.10}
+      admin-net: {}
+    ports:
+      - "127.0.0.1:8080:8080"   # admin/demo access from the VM only
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  llm:
+    <<: *hardening
+    build: ./containers/llm
+    networks:
+      model-net: {ipv4_address: 172.28.3.2}
+    mem_limit: 512m
+    cpus: 1.0
+
+  red:
+    <<: *hardening
+    build: ./containers/red
+    environment:
+      - RED_TOKEN=${RED_TOKEN:?set in .env}   # red never receives BLUE_TOKEN
+      - GATEWAY_URL=http://172.28.1.2:8080
+    networks:
+      red-net: {ipv4_address: 172.28.1.3}
+    mem_limit: 128m
+    cpus: 0.5
+
+  blue:
+    <<: *hardening
+    build: ./containers/blue
+    environment:
+      - BLUE_TOKEN=${BLUE_TOKEN:?set in .env} # blue never receives RED_TOKEN
+      - GATEWAY_URL=http://172.28.2.2:8080
+    networks:
+      blue-net: {ipv4_address: 172.28.2.3}
+    mem_limit: 128m
+    cpus: 0.5
+
+networks:
+  # internal: true = no route to the outside world and no cross-network traffic.
+  # Explicit subnets are required so the ipv4_address pins above are valid.
+  red-net:
+    internal: true
+    ipam: {config: [{subnet: 172.28.1.0/24}]}
+  blue-net:
+    internal: true
+    ipam: {config: [{subnet: 172.28.2.0/24}]}
+  model-net:
+    internal: true
+    ipam: {config: [{subnet: 172.28.3.0/24}]}
+  # Only the gateway joins this one, purely so its port can be published to
+  # the VM's loopback for admin/demo use.
+  admin-net: {}
+
+volumes:
+  audit-data:
