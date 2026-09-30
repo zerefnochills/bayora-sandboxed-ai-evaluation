@@ -85,3 +85,26 @@ container, so it isn't affected by the DNS issue above — only requests
   iptables isolation between tenants (separate `internal: true` networks) is
   unaffected either way — that's enforced by the host kernel regardless of
   which netstack mode runsc uses.
+
+## Models (LLM adapter layer)
+
+The gateway calls models through `gateway/llm_adapters.py` (providers: `mock`,
+`openai` = any OpenAI-compatible API incl. local Ollama/vLLM/llama.cpp, `anthropic`).
+Configure them in `gateway/models.json` (see `models.example.json`); API keys come
+from gateway environment variables named by `api_key_env` and are never stored in
+the file, returned by an API, or logged. Clients choose a model by id only
+(`POST /red/tests {"prompt":..., "model":"<id>"}`, list with `GET /models`).
+Cloud/local models need egress from the gateway (it already has `admin-net`);
+local servers must be reachable from the gateway container.
+Tests without Docker: `python3 tests/adapter_test.py`.
+
+## Demo UI (`/ui`) — demo only
+
+Set `DEMO_UI=1` for the gateway, then open `http://127.0.0.1:8080/ui`. The page calls
+`GET /ui/demo-tokens`, which mints a fresh short-lived token per role (red/blue/admin) with
+the gateway's existing signing secret (default 15 min; `DEMO_TOKEN_TTL` seconds, clamped
+5–3600). The page refetches on a 401. The endpoint is 404 unless `DEMO_UI=1` and for any
+caller on the red/blue/model networks. It hands one browser every role, so it defeats
+tenant isolation and must never be enabled outside a demo. Real deployments are unchanged:
+tokens still come from `scripts/setup_env.py` (12h) and go through the same `auth.verify()`.
+The red/blue containers and the test scripts still use those `.env` tokens.

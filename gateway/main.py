@@ -14,14 +14,20 @@ import uuid
 from typing import Optional
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException
+import logging
+
+import jwt
+from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from audit import AuditLog
-from auth import require
+from auth import ALGO, SECRET, require, verify
+from llm_adapters import AdapterError, ID_RE, Registry
 
 LLM_URL = os.environ.get("LLM_URL", "http://llm:8000")
 audit = AuditLog(os.environ.get("AUDIT_PATH", "/data/audit.jsonl"))
+MODELS = Registry.load(os.environ.get("MODELS_CONFIG", os.path.join(os.path.dirname(__file__), "models.json")), LLM_URL)
 app = FastAPI(title="Bayora policy gateway")
 
 TESTS: dict = {}     # test_id -> record (in memory for the PoC)
@@ -51,27 +57,47 @@ def healthz():
 # ---------------- red team ----------------
 class Submit(BaseModel):
     prompt: str = Field(min_length=1, max_length=4000)
+    # Optional conversation. The gateway namespaces it by tenant, so the LLM
+    # only ever sees an opaque id and no tenant can name another's session.
+    session_id: Optional[str] = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    # Which configured model to test (id from GET /models). Default: the configured default.
+    model: Optional[str] = Field(default=None, max_length=40, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+def llm_session(sub: str, sid: Optional[str]) -> Optional[str]:
+    return None if sid is None else sha(f"{sub}:{sid}")[:32]
 
 
 @app.post("/red/tests")
 async def submit_test(body: Submit, authorization: Optional[str] = Header(None)):
     p = need(authorization, "test:submit")
+    adapter = MODELS.get(body.model)
+    if adapter is None:
+        raise HTTPException(422, "unknown model")
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(f"{LLM_URL}/generate", json={"prompt": body.prompt})
-            r.raise_for_status()
-            response = r.json()["response"]
-    except (httpx.HTTPError, KeyError, ValueError):
-        audit.append("llm_error", "gateway", {})
+        res = await adapter.generate(body.prompt, llm_session(p.sub, body.session_id))
+    except AdapterError:
+        audit.append("llm_error", "gateway", {"model": adapter.id})
         raise HTTPException(502, "model unavailable")
+    response = res.text
     test_id = uuid.uuid4().hex[:12]
-    TESTS[test_id] = {"status": "active", "prompt": body.prompt,
-                      "response": response, "created": time.time()}
+    TESTS[test_id] = {"status": "active", "prompt": body.prompt, "response": response,
+                      "created": time.time(), "model": adapter.id, "latency_ms": res.latency_ms}
     # The audit log stores hashes, not content, so it can't leak payloads.
     audit.append("test_submitted", p.sub, {"test_id": test_id,
                                            "prompt_sha256": sha(body.prompt),
-                                           "response_sha256": sha(response)})
-    return {"test_id": test_id, "status": "active", "response": response}
+                                           "response_sha256": sha(response),
+                                           "session": body.session_id is not None,
+                                           "model": adapter.id, "latency_ms": res.latency_ms})
+    return {"test_id": test_id, "status": "active", "response": response,
+            "model": adapter.id, "latency_ms": res.latency_ms}
+
+
+@app.get("/models")
+def list_models(authorization: Optional[str] = Header(None)):
+    """Any valid token may list models. Endpoints and key names are never returned."""
+    verify(authorization)
+    return MODELS.public()
 
 
 @app.post("/red/tests/{test_id}/conclude")
@@ -130,3 +156,47 @@ def audit_verify(authorization: Optional[str] = Header(None)):
 def audit_entries(limit: int = 50, authorization: Optional[str] = Header(None)):
     need(authorization, "audit:read")
     return audit.tail(max(1, min(limit, 500)))
+
+
+# ---------------- demo UI ----------------
+# DEMO ONLY: /ui/demo-tokens hands the browser a token for every role, which
+# defeats tenant isolation. Off unless DEMO_UI=1, and refused for any caller
+# on the red/blue/model networks (only the VM's published port may use it).
+# With DEMO_UI=1 it MINTS fresh short-lived tokens per request with the
+# gateway's existing signing secret, so the demo page never depends on the
+# 12h tokens in .env. Normal auth is unchanged: these are ordinary scoped
+# JWTs verified by auth.verify() like any other. Keep DEMO_SCOPES identical
+# to scripts/setup_env.py SCOPES (tests/demo_token_test.py enforces this).
+UI_DIR = os.path.join(os.path.dirname(__file__), "ui")
+TENANT_NETS = ("172.28.1.", "172.28.2.", "172.28.3.")
+DEMO_SCOPES = {
+    "red":   ["test:submit", "test:conclude"],
+    "blue":  ["test:list", "test:read", "test:defend"],
+    "admin": ["audit:read"],
+}
+log = logging.getLogger("uvicorn.error")
+
+
+def _demo_ttl() -> int:
+    try:
+        return max(5, min(3600, int(os.environ.get("DEMO_TOKEN_TTL", "900"))))
+    except ValueError:
+        return 900
+
+
+@app.get("/ui/demo-tokens")
+def demo_tokens(request: Request, response: Response):
+    host = request.client.host if request.client else ""
+    if os.environ.get("DEMO_UI") != "1" or host.startswith(TENANT_NETS):
+        raise HTTPException(404, "not found")
+    now, ttl = int(time.time()), _demo_ttl()
+    response.headers["Cache-Control"] = "no-store"
+    log.info("demo tokens minted (ttl=%ss) for %s", ttl, host)  # never logs the tokens
+    return {role: jwt.encode({"sub": role, "scope": scope, "iat": now, "exp": now + ttl,
+                              "jti": uuid.uuid4().hex, "demo": True}, SECRET, algorithm=ALGO)
+            for role, scope in DEMO_SCOPES.items()}
+
+
+@app.get("/ui")
+def ui():
+    return FileResponse(os.path.join(UI_DIR, "index.html"))

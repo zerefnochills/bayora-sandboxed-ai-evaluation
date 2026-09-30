@@ -1,0 +1,53 @@
+# Bayora audit-anchor sidecar override
+services:
+  gateway:
+    environment:
+      ANCHOR_URL: "http://172.28.9.3:9000"
+      ANCHOR_TOKEN: "${ANCHOR_TOKEN:?run scripts/add_anchor_token.sh first}"
+    networks:
+      anchor-net:
+        ipv4_address: 172.28.9.2
+
+  audit-anchor:
+    build: ./anchor
+    runtime: ${SANDBOX_RUNTIME:-runsc}
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
+
+    environment:
+      ANCHOR_TOKEN: "${ANCHOR_TOKEN:?run scripts/add_anchor_token.sh first}"
+
+    volumes:
+      - anchor-data:/anchor-data
+
+    networks:
+      anchor-net:
+        ipv4_address: 172.28.9.3
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:9000/health', timeout=8).status == 200 else 1)"
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+networks:
+  anchor-net:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.28.9.0/24
+
+volumes:
+  anchor-data:

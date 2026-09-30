@@ -11,7 +11,7 @@ actually been built and tested, not from the original plan.
 | Network segmentation (3 internal-only Docker networks; gateway is the only shared node) | Direct container-to-container traffic between red, blue and the LLM. Verified: 10/10 network-isolation checks pass, including no route to the internet from red or the LLM. | A compromised gateway process itself — it's the one node with legitimate access to all three networks, so it's also the single point of failure for the isolation model. | Docker's bridge/iptables enforcement isn't bypassed by host-level misconfiguration. |
 | ABAC via scoped, signed JWTs (12h expiry) | Early exposure of red-team payloads or blue-team defensive notes; use of a valid token on the wrong route (verified: a valid red-scoped token gets 403 on every blue-scoped and admin-scoped endpoint, and vice versa); forged signatures (verified: a token signed with the wrong secret is rejected); expired tokens (verified: a real token was left to expire and was then rejected). | A leaked, still-valid token — this is a bearer-token model, so possession is proof of scope. Also: one shared HMAC secret signs every tenant's tokens, so a secret leak compromises all three at once. | The `JWT_SECRET` value itself never leaves the gateway's environment. |
 | Test-phase gating (`status != "concluded"`) | Blue team reading a test's prompt/response while red team's attack is still active. Verified live: reads return 403 before conclusion, 200 after. | Nothing once a test is concluded — release is all-or-nothing per test, not gradual or redacted. | Red team alone controls when a test concludes, and does so honestly for the PoC's purposes. |
-| Hash-chained audit log | Silent editing or deleting of a past entry — verified: editing one field of one historical entry, or deleting an entry outright, both cause `verify()` to report the chain broken at that exact point. | An attacker who can rewrite the *entire* log file from scratch produces a self-consistent chain — there's no external anchor for the head hash yet. | The log service/volume itself isn't compromised, and nobody with that access is also an adversary being tested. |
+| Hash-chained audit log + append-only anchor sidecar | Silent editing or deleting of a past entry (verified: editing a field or deleting an entry makes `verify()` report the chain broken at that exact point). Also a **full-file rewrite** of the gateway's log: every entry is POSTed to a separate `audit-anchor` service with its own volume and lifecycle, which has no update/delete endpoint and rejects any entry that doesn't extend its chain. Verified with `tests/anchor_selftest.py`: `verify()` alone accepts a forged from-scratch chain (the real gap); the anchor cross-check flags every forged entry, the anchor refuses forked entries (409), truncation is detectable, and all of this holds across a simulated gateway restart (the case that broke the earlier `docker logs` design, whose history reset on every rebuild). | A compromised **host** or direct write access to the anchor's volume. A compromised gateway can also *stop* anchoring; that is fail-open by design, so it shows up as degraded anchor health and unanchored entries rather than blocking requests. Entries backfilled after an outage are only as trustworthy as the moment they were anchored. `docker compose down -v` deletes the anchor's volume. | The host isn't compromised, and `ANCHOR_TOKEN` stays out of tenant reach. |
 | cgroup resource limits (`mem_limit`/`cpus` per service) | A single noisy tenant consuming the whole host's CPU/memory. Verified: with `red`'s single-threaded CPU burner confirmed running, `docker stats` plateaued at ~39% (well under an unthrottled process's ~100% ceiling for one core, and consistent with the configured 0.5 vCPU limit), while the gateway's `/healthz` latency was effectively unchanged from baseline (0.067–0.075s idle vs. 0.069–0.077s under load) and blue/llm stayed fully responsive throughout. | Multiple simultaneous burner processes in one gVisor-sandboxed container: an earlier test run that launched 4 at once wedged that container's gVisor sentry badly enough that `docker exec`/`stop` stopped responding, even though the cgroup cap itself wasn't at fault. Recovered via `docker kill` + recreate; the fairness test now deliberately uses only one burner and hard-times-out every command so this can't recur silently. | The host has enough real headroom that gVisor's own per-container sentry overhead doesn't itself become the bottleneck before the cgroup limit does — true here on a 4-core VM, worth re-checking on tighter hardware. |
 | gVisor (`runsc`) sandboxing, sandboxed netstack | Container syscalls being handled by an emulated kernel rather than passed straight to the host's. Verified via `dmesg` showing gVisor's own kernel messages inside a test container. | Any exploit that stays entirely within what the sandboxed netstack faithfully emulates. Also: Docker's embedded DNS server doesn't work under gVisor's default network mode — worked around with static per-network IPs (a config decision, not a security hole) rather than switching to `runsc --network=host`, which would have fixed DNS by handing network syscalls straight to the host kernel and given up exactly this isolation layer. | gVisor's own emulation is itself free of exploitable gaps — this is inherently something the project can document a mitigation for, not prove absent. |
 | Stateless mock LLM (fresh request, no history/cache) | Cross-session leakage through a shared KV-cache or conversation history — there is none to leak, by construction. | This sidesteps the shared-batch-inference leakage problem named in the brief rather than solving it. A real model served with batching would need to re-address this from scratch. | The PoC's mock LLM is representative enough of the threat surface for evaluation purposes; a production model would not be this simple. |
@@ -20,17 +20,22 @@ actually been built and tested, not from the original plan.
 
 - Rotating or per-tenant signing keys (currently one shared JWT secret).
 - Redacting or partially releasing test results (it's all-or-nothing per test).
-- Anchoring the audit log's head hash somewhere outside the gateway's own reach.
+- Anchoring against a compromised *host*: the anchor sidecar shares the host
+  with everything else. Publishing the head hash to an off-host witness
+  (a remote server, a signed timestamp) would close this.
+- Fail-closed anchoring (refusing requests while the anchor is down). The PoC
+  is fail-open and loud instead.
 - Timing/padding side-channel mitigation on the gateway's responses.
 - Observability/anomaly detection beyond the audit log itself (planned, not yet built).
 
 ## Residual risk, summarized
 
 The architecture's guarantees hold up to and including the gateway process
-itself. Every claim above that's marked "verified" was tested against the
-actual running system, not assumed from the design. The one remaining open
-item — hardening the audit log against a full-file rewrite — is the honest
-gap, not a polished part. A second, unplanned finding came from testing
-itself: piling up several CPU-bound processes in one gVisor container can
-stall its sentry independently of whether the cgroup cap is doing its job,
-which is now documented above rather than left as a one-off incident.
+itself. Every claim marked "verified" was tested against the running system
+or a live end-to-end test, not assumed from the design. The audit log's
+full-file-rewrite gap is closed against a compromised gateway container; the
+remaining boundary is the host. Two findings came from testing itself rather
+than the plan: piling up CPU-bound processes in one gVisor container can
+stall its sentry independently of the cgroup cap, and the first anchor design
+(`docker logs`) silently lost its history on every gateway rebuild, which is
+why the anchor is now a separate service with its own lifecycle.

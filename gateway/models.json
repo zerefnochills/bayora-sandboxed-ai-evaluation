@@ -1,0 +1,6 @@
+{
+  "default": "mock",
+  "models": [
+    {"id": "mock", "provider": "mock", "name": "Mock LLM", "kind": "mock"}
+  ]
+}

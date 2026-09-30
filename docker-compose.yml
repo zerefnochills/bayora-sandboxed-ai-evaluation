@@ -28,6 +28,7 @@ services:
       - RED_TOKEN=${RED_TOKEN:?set in .env}
       - BLUE_TOKEN=${BLUE_TOKEN:?set in .env}
       - ADMIN_TOKEN=${ADMIN_TOKEN:?set in .env}
+      - DEMO_UI=${DEMO_UI:-0}   # 1 = serve /ui/demo-tokens (demo only, see gateway/main.py)
       - LLM_URL=http://172.28.3.2:8000
     volumes:
       - audit-data:/data
