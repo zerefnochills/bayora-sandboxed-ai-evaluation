@@ -24,14 +24,16 @@ from pydantic import BaseModel, Field
 from audit import AuditLog
 from auth import ALGO, SECRET, require, verify
 from llm_adapters import AdapterError, ID_RE, Registry
+from store import Store
 
 LLM_URL = os.environ.get("LLM_URL", "http://llm:8000")
 audit = AuditLog(os.environ.get("AUDIT_PATH", "/data/audit.jsonl"))
 MODELS = Registry.load(os.environ.get("MODELS_CONFIG", os.path.join(os.path.dirname(__file__), "models.json")), LLM_URL)
 app = FastAPI(title="Bayora policy gateway")
 
-TESTS: dict = {}     # test_id -> record (in memory for the PoC)
-DEFENSES: dict = {}  # test_id -> list of blue-team notes (never readable by red)
+# Tests and blue-team defenses (defenses are never readable by red) live in SQLite on the
+# same volume as the audit log, so they survive a restart.
+store = Store(os.environ.get("DB_PATH") or os.path.join(os.path.dirname(audit.path), "bayora.db"))
 
 
 def sha(text: str) -> str:
@@ -43,7 +45,7 @@ def need(authorization, scope):
 
 
 def get_test(test_id: str) -> dict:
-    t = TESTS.get(test_id)
+    t = store.get_test(test_id)
     if t is None:
         raise HTTPException(404, "unknown test")
     return t
@@ -81,8 +83,7 @@ async def submit_test(body: Submit, authorization: Optional[str] = Header(None))
         raise HTTPException(502, "model unavailable")
     response = res.text
     test_id = uuid.uuid4().hex[:12]
-    TESTS[test_id] = {"status": "active", "prompt": body.prompt, "response": response,
-                      "created": time.time(), "model": adapter.id, "latency_ms": res.latency_ms}
+    store.create_test(test_id, body.prompt, response, adapter.id, res.latency_ms)
     # The audit log stores hashes, not content, so it can't leak payloads.
     audit.append("test_submitted", p.sub, {"test_id": test_id,
                                            "prompt_sha256": sha(body.prompt),
@@ -103,9 +104,8 @@ def list_models(authorization: Optional[str] = Header(None)):
 @app.post("/red/tests/{test_id}/conclude")
 def conclude_test(test_id: str, authorization: Optional[str] = Header(None)):
     p = need(authorization, "test:conclude")
-    t = get_test(test_id)
-    if t["status"] != "concluded":
-        t["status"] = "concluded"
+    get_test(test_id)  # 404 if unknown
+    if store.conclude(test_id):
         audit.append("test_concluded", p.sub, {"test_id": test_id})
     return {"test_id": test_id, "status": "concluded"}
 
@@ -115,7 +115,7 @@ def conclude_test(test_id: str, authorization: Optional[str] = Header(None)):
 def blue_list(authorization: Optional[str] = Header(None)):
     need(authorization, "test:list")
     # Metadata only: no prompts or responses until a test concludes.
-    return [{"test_id": k, "status": v["status"]} for k, v in TESTS.items()]
+    return store.list_tests()
 
 
 @app.get("/blue/tests/{test_id}")
@@ -139,7 +139,7 @@ def blue_defend(test_id: str, body: Defense, authorization: Optional[str] = Head
     t = get_test(test_id)
     if t["status"] != "concluded":
         raise HTTPException(403, "test still active")
-    DEFENSES.setdefault(test_id, []).append(body.note)
+    store.add_defense(test_id, body.note)
     audit.append("defense_recorded", p.sub, {"test_id": test_id,
                                               "note_sha256": sha(body.note)})
     return {"test_id": test_id, "recorded": True}

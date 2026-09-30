@@ -1,0 +1,22 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  unit:
+    # Everything here runs without Docker. The Docker/gVisor checks
+    # (tests/isolation_test.sh, tests/fairness_test.sh, scripts/demo.sh) still run on the VM.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r gateway/requirements.txt
+      - name: Shell scripts parse
+        run: for f in scripts/*.sh tests/*.sh; do bash -n "$f"; done
+      - name: No-Docker tests
+        run: |
+          for f in tests/*_test.py tests/*_selftest.py; do
+            echo "=== $f"
+            python3 "$f" || exit 1
+          done

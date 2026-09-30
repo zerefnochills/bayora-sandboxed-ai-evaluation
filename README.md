@@ -68,7 +68,10 @@ container, so it isn't affected by the DNS issue above — only requests
 
 ## Known limits (go in the threat model)
 
-- Test state lives in gateway memory; audit log persists in a volume.
+- Tests and blue-team defenses persist in SQLite (`gateway/store.py`, `/data/bayora.db` on the
+  same volume as the audit log; `DB_PATH` overrides). The DB is mutable and not tamper-evident by
+  itself: the audit log holds sha256 of every stored prompt/response to check it against.
+  Prompts and responses are stored in plaintext with no retention policy yet.
 - Tokens are scoped, signed JWTs (HS256, one shared secret) with a 12h
   default lifetime — real ABAC now, not just per-tenant role names. One
   trust root for the PoC: a production version would give each tenant its
