@@ -19,6 +19,7 @@ SCOPES = {
     "red":   ["test:submit", "test:conclude"],
     "blue":  ["test:list", "test:read", "test:defend"],
     "admin": ["audit:read"],
+    "evaluator": ["eval:run", "eval:read"],
 }
 
 

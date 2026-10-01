@@ -36,7 +36,7 @@ for net in ("172.28.1.3", "172.28.2.3", "172.28.3.2"):
 
 print("== minted tokens")
 r = host.get("/ui/demo-tokens"); t1 = r.json()
-check("200 with red/blue/admin", r.status_code == 200 and set(t1) == {"red", "blue", "admin"})
+check("200 with red/blue/admin/evaluator (exact set)", r.status_code == 200 and set(t1) == {"red", "blue", "admin", "evaluator"})
 check("NOT the static env tokens", SENTINEL not in r.text)
 check("Cache-Control: no-store", r.headers.get("cache-control") == "no-store")
 check("scopes identical to scripts/setup_env.py (drift guard)", {k: dec(v)["scope"] for k, v in t1.items()} == setup_env.SCOPES, {k: dec(v)["scope"] for k, v in t1.items()})

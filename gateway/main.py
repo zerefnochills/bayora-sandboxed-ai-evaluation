@@ -25,6 +25,8 @@ from audit import AuditLog
 from auth import ALGO, SECRET, require, verify
 from llm_adapters import AdapterError, ID_RE, Registry
 from store import Store
+from evaluator import Runner, RunBusy, RunRefused
+from suites import SuiteRegistry
 
 LLM_URL = os.environ.get("LLM_URL", "http://llm:8000")
 audit = AuditLog(os.environ.get("AUDIT_PATH", "/data/audit.jsonl"))
@@ -173,6 +175,7 @@ DEMO_SCOPES = {
     "red":   ["test:submit", "test:conclude"],
     "blue":  ["test:list", "test:read", "test:defend"],
     "admin": ["audit:read"],
+    "evaluator": ["eval:run", "eval:read"],
 }
 log = logging.getLogger("uvicorn.error")
 
@@ -200,3 +203,75 @@ def demo_tokens(request: Request, response: Response):
 @app.get("/ui")
 def ui():
     return FileResponse(os.path.join(UI_DIR, "index.html"))
+
+
+# ---------------- evaluation engine ----------------
+# The runner drives this gateway's own routes in-process with short-lived tokens for the
+# actors eval-red / eval-blue / eval-probe-*, so every request it makes is authenticated,
+# scope-checked and audited exactly like a Red or Blue client's. See evaluator.py.
+SUITES = SuiteRegistry.load(os.environ.get("SUITES_DIR", os.path.join(os.path.dirname(__file__), "suites")))
+
+
+def _mint(sub: str, scope: list, ttl: int = 120, key: Optional[str] = None) -> str:
+    now = int(time.time())
+    return jwt.encode({"sub": sub, "scope": scope, "iat": now, "exp": now + ttl, "jti": uuid.uuid4().hex},
+                      key or SECRET, algorithm=ALGO)
+
+
+def _secret_values() -> list:
+    names = ["RED_TOKEN", "BLUE_TOKEN", "ADMIN_TOKEN", "EVALUATOR_TOKEN", "ANCHOR_TOKEN"]
+    names += [a.key_env for a in MODELS.adapters.values() if a.key_env]
+    return [SECRET] + [os.environ.get(n, "") for n in names]
+
+
+runner = Runner(app, audit, store, MODELS, SUITES, _mint, DEMO_SCOPES, _secret_values)
+runner.recover()
+
+
+class EvalRequest(BaseModel):
+    suite_id: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_.-]*$")
+    model: Optional[str] = Field(default=None, max_length=40, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+def _get_run(run_id: str) -> dict:
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(404, "unknown evaluation")
+    return run
+
+
+@app.get("/suites")
+def list_suites(authorization: Optional[str] = Header(None)):
+    need(authorization, "eval:read")
+    return SUITES.public()
+
+
+@app.post("/evaluations", status_code=202)
+async def start_evaluation(body: EvalRequest, authorization: Optional[str] = Header(None)):
+    p = need(authorization, "eval:run")
+    try:
+        run = runner.start(p.sub, body.model, body.suite_id)
+    except RunBusy as e:
+        raise HTTPException(409, "an evaluation is already running: " + str(e.run_id))
+    except RunRefused as e:
+        raise HTTPException(422, str(e))
+    return runner.public_run(run)
+
+
+@app.get("/evaluations")
+def list_evaluations(authorization: Optional[str] = Header(None)):
+    need(authorization, "eval:read")
+    return [runner.public_run(r) for r in store.list_runs()]
+
+
+@app.get("/evaluations/{run_id}")
+def get_evaluation(run_id: str, authorization: Optional[str] = Header(None)):
+    need(authorization, "eval:read")
+    return runner.public_run(_get_run(run_id), with_check=True)
+
+
+@app.get("/evaluations/{run_id}/results")
+def get_evaluation_results(run_id: str, authorization: Optional[str] = Header(None)):
+    need(authorization, "eval:read")
+    _get_run(run_id)
+    return store.results(run_id)
