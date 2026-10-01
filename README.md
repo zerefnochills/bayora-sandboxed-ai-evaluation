@@ -92,7 +92,7 @@ container, so it isn't affected by the DNS issue above — only requests
 ## Models (LLM adapter layer)
 
 The gateway calls models through `gateway/llm_adapters.py` (providers: `mock`,
-`openai` = any OpenAI-compatible API incl. local Ollama/vLLM/llama.cpp, `anthropic`).
+`ollama`, `openai` = any OpenAI-compatible API incl. vLLM/llama.cpp/LM Studio, `anthropic`).
 Configure them in `gateway/models.json` (see `models.example.json`); API keys come
 from gateway environment variables named by `api_key_env` and are never stored in
 the file, returned by an API, or logged. Clients choose a model by id only
@@ -100,6 +100,58 @@ the file, returned by an API, or logged. Clients choose a model by id only
 Cloud/local models need egress from the gateway (it already has `admin-net`);
 local servers must be reachable from the gateway container.
 Tests without Docker: `python3 tests/adapter_test.py`.
+
+### Real providers (Ollama / OpenAI-compatible)
+
+`gateway/models.example.json` has a ready entry. `provider: "ollama"` is the same OpenAI-compatible
+code path as `openai`, with local defaults (endpoint `http://host.docker.internal:11434/v1`, no key,
+120 s timeout because the first request loads the model, 2 concurrent, 500 requests per evaluation).
+Evaluations use it exactly like the mock: `POST /evaluations {"suite_id": ..., "model": "<id>"}` still
+drives the gateway's own `/red/...` routes, so auth, phase gating, the store, the audit log and the anchor
+are the same path. Endpoints, key names and keys are never returned by any API, UI, result or audit entry.
+
+| Setting (per model) | Default | Meaning |
+|---|---|---|
+| `timeout_s` / `connect_timeout_s` | 30 (ollama 120) / 5 | Overall deadline for one request (a slow-drip body can't outrun it) / time to establish the connection |
+| `max_tokens` | 512 (max 8192) | Reply cap sent to the provider |
+| `max_response_bytes` | 1 MiB | The body is streamed and aborted past this; an oversize reply is an error |
+| `max_concurrent` | 4 (ollama 2) | Simultaneous requests to the provider; others wait |
+| `max_requests_per_minute` | 0 = off | Callers wait for a slot up to `timeout_s`, then get HTTP 429 (shown as `blocked`) |
+| `max_requests_per_run` | none (ollama 500) | An evaluation needing more requests (attacks + 3 session probes) is refused up front (422) |
+
+**Health check.** Before an evaluation sends anything, the provider is probed (`GET <endpoint>/models`: reachable?
+credentials accepted? model present?). If that fails, the run is recorded as `failed` with
+`error.stage = "provider_health"` and **zero result rows**, so an unreachable provider can never appear as attack
+cases a model "failed". You can run the same probe yourself: `GET /models/<id>/health` (scope `eval:read`) or the
+"Test connection" button in `/ui`. A provider that is up but doesn't list models (HTTP 404/405/501) is
+`ok_unverified`; Anthropic has no probe (`not_checked`) because it would cost a billable call.
+If it dies mid-run, the remaining attacks are `error` rows (HTTP 502), never `fail`.
+
+**Labels.** Every run and every result row carries `provider`, `provider_model`, `provider_kind` (`mock` or
+`real`), model id, suite id and version, timestamps, latency and status; `/ui` shows MOCK MODEL / REAL PROVIDER
+on the selector, the run header, results and history. The label comes from the configured provider: a fake
+server configured as `ollama` is labelled REAL, because the gateway cannot tell. Runs made before this
+feature show PROVIDER UNKNOWN.
+
+**Ollama on the VM.** Ollama listens on 127.0.0.1 by default, which a container cannot reach. The red/blue
+containers have no route to it by design; only the gateway (which has `admin-net`) needs to.
+1. Make Ollama listen on the docker bridge instead of loopback (narrowest option):
+   `sudo systemctl edit ollama` -> `[Service]` / `Environment="OLLAMA_HOST=<docker0 IP>:11434"` (see
+   `ip -4 addr show docker0`, usually 172.17.0.1), then `sudo systemctl restart ollama`, `ollama pull llama3.2`.
+2. Copy `gateway/models.example.json` to `gateway/models.json`, keep the `ollama-llama32` entry and set its
+   `endpoint` to `http://<docker0 IP>:11434/v1` (or keep `host.docker.internal` and add
+   `extra_hosts: ["host.docker.internal:host-gateway"]` to the gateway service; I did not edit compose).
+3. `docker compose up -d --build gateway` (models.json is baked into the image).
+4. Check reachability *from inside the container*, which is what matters (gVisor networking to the host is
+   untested here): the "Test connection" button, or
+   `curl -s -H "Authorization: Bearer $EVALUATOR_TOKEN" localhost:8080/models/ollama-llama32/health`.
+   `unreachable` means a networking problem, not an evaluation problem.
+5. Opt-in integration test against the real server (not run in CI):
+   `BAYORA_REAL_PROVIDER=1 BAYORA_REAL_MODEL=llama3.2 python3 tests/real_provider_test.py`
+   (`BAYORA_REAL_ENDPOINT` defaults to `http://127.0.0.1:11434/v1`; it runs the gateway in-process).
+
+Tests without Docker or Ollama: `python3 tests/provider_test.py` (a fake OpenAI-compatible server over real
+sockets) and `python3 tests/fake_provider.py 18090` to point `/ui` at a fake provider by hand.
 
 ## Evaluation engine
 
