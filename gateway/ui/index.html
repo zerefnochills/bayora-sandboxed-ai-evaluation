@@ -29,6 +29,15 @@ pre{white-space:pre-wrap;word-break:break-all;background:#0b0f17;border-radius:8
 .tam{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tam>div{background:#0d121b;border:1px solid var(--bd);border-radius:10px;padding:8px}.tam h3{margin:0 0 4px;font-size:11px;color:var(--mut);text-transform:uppercase}.ck{padding:2px 0}.ck.y:before{content:"✓ ";color:var(--ok)}.ck.n:before{content:"✕ ";color:var(--red)}
 .big{font-size:15px;font-weight:800;letter-spacing:.06em;margin:4px 0 8px}#flash{position:fixed;right:16px;bottom:16px;max-width:340px;padding:10px 14px;border-radius:10px;font-weight:600;opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none;border:1px solid}#flash.show{opacity:1;transform:none}
 @media(max-width:700px){.tam{grid-template-columns:1fr}}
+.E{border-top:2px solid #a78bfa}.E h2{color:#a78bfa}.E h3{margin:12px 0 4px;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.evctl{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:6px 0}.evctl label{display:flex;flex-direction:column;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;gap:3px;min-width:190px}
+select{background:#0b0f17;color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:7px 9px;font:inherit}select:focus{outline:none;border-color:var(--blue)}
+.bar{height:8px;border-radius:99px;background:#1c2332;overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--ok));transition:width .4s}
+.evtw{overflow-x:auto}.rt{width:100%;border-collapse:collapse;font-size:12px}.rt th{text-align:left;color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:4px 6px;border-bottom:1px solid var(--bd);white-space:nowrap}
+.rt td,.rt td:first-child{padding:5px 6px;border-bottom:1px solid #1c2332;width:auto;color:var(--fg);font-size:12px;text-transform:none;letter-spacing:0}.rt tr.r{cursor:pointer}.rt tr.r:hover td{background:#10203a55}.rt tr.o td{background:#10203a55}
+.evd{color:var(--mut);font-size:12px;padding:4px 2px}.evd b{color:var(--fg)}.evd pre{max-height:140px}
+.evf button.on{border-color:var(--blue);background:#12264a}.evh{display:flex;align-items:center;gap:8px;padding:6px;border:1px solid var(--bd);border-radius:8px;margin:4px 0;cursor:pointer;flex-wrap:wrap}.evh.sel{border-color:#a78bfa;background:#1a1530}.evh code{font:11px ui-monospace,monospace}.evh span.t{color:var(--mut);font-size:11px;flex:1;min-width:140px}
+.evi{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}.evi>div{background:#0d121b;border:1px solid var(--bd);border-radius:10px;padding:8px}.evi h3{margin:0 0 4px}
 </style></head><body>
 <header><div class="logo">B</div><h1>BAYORA<small>AI Security Evaluation Platform</small></h1><span class="sp"></span>
 <span id="pConn" class="pill">connecting</span><span id="pAud" class="pill">audit …</span><span id="pAnc" class="pill">anchor …</span></header>
@@ -58,7 +67,15 @@ pre{white-space:pre-wrap;word-break:break-all;background:#0b0f17;border-radius:8
 <div id="aout" class="sub">Run a test to see the result.</div></section>
 <section class="card A"><h2>TAMPER DETECTION</h2><p class="sub">A local check alone can be fooled by a rewritten log. An independent anchor copy cannot.</p><div id="tam"></div></section>
 <section class="card"><h2>SELECTED TEST</h2><div id="det"></div></section>
-</div></main><div id="flash"></div>
+</div>
+<section class="card E" id="evcard"><h2>EVALUATION ENGINE</h2>
+<p class="sub">Run a whole attack suite against a model automatically, through the same Red → Gateway → LLM → Audit path. <b>Gateway controls</b> get a <span class="tip" title="Checked from HTTP status codes, stored state and audit entries. A failure here is a real defect.">deterministic</span> pass/fail. <b>Model answers</b> get a <span class="tip" title="A substring screen over the model's reply. It can miss paraphrased failures and can flag harmless replies. It is not ground truth.">heuristic</span> screen: a screening aid, not proof the model is safe.</p>
+<div class="evctl"><label>Model<select id="evModel"></select></label><label>Attack suite<select id="evSuite"></select></label><button class="bo" id="evRun" onclick="evStart()">▶ Run Evaluation</button></div>
+<div id="evSuiteInfo" class="sub"></div><div id="evMsg"></div>
+<div id="evProg"></div><div class="row ov" id="evSum"></div><div id="evInteg"></div>
+<div id="evResWrap"></div>
+<h3>History</h3><div id="evHist"></div></section>
+</main><div id="flash"></div>
 <script>
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let T={},sel=null,info={},tests=[],ents=[],ver=null,iso=null,atkRes=null,ftimer;
@@ -131,5 +148,73 @@ async function probeIso(){const c=Math.floor(1000+Math.random()*9000),a='probe-a
  if(![w,r1,r2].every(x=>x.status==200)){$('#aout').innerHTML=msg([w,r1,r2].find(x=>x.status!=200));return}
  const own=r1.body.response.includes(c),leak=r2.body.response.includes(c);iso=own&&!leak;flash(iso?'g':'x',iso?'Session isolation confirmed':'Session leak!');
  $('#aout').innerHTML=`<div class="lock ${iso?'u':'l'}"><b>${iso?'✓ SESSION ISOLATION ON':'✕ '+(leak?'LEAK FOUND':'PROBE INCONCLUSIVE')}</b>Session A recalled its own secret: ${own?'yes':'no'}. Session B saw it: ${leak?'YES':'no'}.</div><div class="sub">Used 3 real test entries.</div>`;await refresh()}
-(async()=>{const r=await fetch('/ui/demo-tokens').catch(()=>({ok:false}));if(!r.ok){render();$('#pConn').className='pill x';$('#pConn').textContent='DEMO TOKENS OFF (DEMO_UI=1)';return}T=await r.json();await refresh();setInterval(refresh,8000)})();
+/* ---- Evaluation engine panel (uses the 'evaluator' demo token; all names prefixed ev) ---- */
+Object.assign(EV,{evaluation_started:'Evaluation started',evaluation_completed:'Evaluation completed',evaluation_interrupted:'Evaluation interrupted',evaluation_failed:'Evaluation failed'});
+let evRun=null,evRows=[],evHist=[],evFilter='all',evOpen=null,evLive=null,evTimer=null,evBusy=false;
+const evSt={pass:['PASS','g'],fail:['FAIL','x'],blocked:['BLOCKED','bl'],error:['ERROR','w']};
+const evAud={recorded:['recorded','g'],mismatch:['MISMATCH','x'],missing:['MISSING','x']};
+const evAnc={verified:['ANCHOR VERIFIED','g'],pending:['ANCHOR PENDING','w'],not_configured:['NO ANCHOR',''],tamper_detected:['ANCHOR MISMATCH','x'],unreachable:['ANCHOR DOWN','w']};
+const evTally=rs=>{const c={pass:0,fail:0,blocked:0,error:0};rs.forEach(r=>{if(c[r.status]!==undefined)c[r.status]++});return c};
+const evAncOf=a=>!a||!a.enabled?'not_configured':(a.conflict||a.anchored>a.local)?'tamper_detected':!a.ok?'unreachable':a.pending>0?'pending':'verified';
+const evS=(n,l,p)=>`<div class="card stat"><span>${esc(l)}</span><b>${esc(n)}</b>${p}</div>`;
+const evPill=(t,c)=>`<span class="pill ${c}">${esc(t)}</span>`;
+async function evCall(m,p,b){let r=await call(T.evaluator,m,p,b);if(r.status==401){const t=await fetch('/ui/demo-tokens').then(x=>x.ok?x.json():null).catch(()=>null);if(t){T=t;r=await call(T.evaluator,m,p,b)}}return r}
+
+async function evInit(){
+ if(!T.evaluator){$('#evMsg').innerHTML='<div class="lock n"><b>EVALUATOR TOKEN UNAVAILABLE</b>This gateway did not issue an evaluator demo token.</div>';$('#evRun').disabled=true;return}
+ const[m,s,h]=await Promise.all([evCall('GET','/models'),evCall('GET','/suites'),evCall('GET','/evaluations')]);
+ if(m.status==200)$('#evModel').innerHTML=m.body.map(x=>`<option value="${esc(x.id)}" ${x.configured?'':'disabled'} ${x.default?'selected':''}>${esc(x.name)} (${esc(x.provider)})${x.configured?'':' — key not set'}</option>`).join('');
+ if(s.status==200){window.evSuites=s.body;$('#evSuite').innerHTML=s.body.map(x=>`<option value="${esc(x.id)}">${esc(x.name)} · v${esc(x.version)} · ${esc(x.attacks)} attacks</option>`).join('');evSuiteInfo()}
+ else $('#evMsg').innerHTML=msg(s);
+ $('#evSuite').onchange=evSuiteInfo;
+ if(h.status==200){evHist=h.body;const live=evHist.find(x=>x.status=='running');if(live){evRun=live;evTimerStart();await evTick()}else if(evHist.length){await evShow(evHist[0].run_id)}}
+ evRender()}
+function evSuiteInfo(){const s=(window.evSuites||[]).find(x=>x.id==$('#evSuite').value);$('#evSuiteInfo').innerHTML=s?`${esc(s.description)}<br>Categories: ${s.categories.map(esc).join(', ')} · content hash <code>${esc(s.sha256.slice(0,12))}</code>`:''}
+
+async function evStart(){
+ const suite=$('#evSuite').value,model=$('#evModel').value;if(!suite)return flash('w','Pick an attack suite');
+ $('#evRun').disabled=true;const r=await evCall('POST','/evaluations',{suite_id:suite,model:model||undefined});
+ if(r.status!=202){$('#evMsg').innerHTML=msg(r);$('#evRun').disabled=false;return}
+ $('#evMsg').innerHTML='';evRun=r.body;evRows=[];evOpen=null;evLive=null;evFilter='all';evTimerStart();pulse(['red','gw','llm','phase']);await evTick()}
+function evTimerStart(){evTimerStop();evTimer=setInterval(evTick,1000);$('#evRun').disabled=true}
+function evTimerStop(){if(evTimer)clearInterval(evTimer);evTimer=null}
+async function evTick(){
+ if(!evRun||evBusy)return;evBusy=true;
+ try{const id=evRun.run_id,[a,b]=await Promise.all([evCall('GET','/evaluations/'+id),evCall('GET','/evaluations/'+id+'/results')]);
+  if(a.status!=200){evTimerStop();$('#evRun').disabled=false;$('#evMsg').innerHTML=msg(a);return}
+  evRun=a.body;if(b.status==200)evRows=b.body;
+  if(evRun.status!='running'){evTimerStop();$('#evRun').disabled=false;const h=await evCall('GET','/evaluations');if(h.status==200)evHist=h.body;refresh();
+   const s=evRun.summary;flash(evRun.status!='completed'?'x':s&&(s.failed||s.errors)?'w':'g',evRun.status!='completed'?'Evaluation '+evRun.status:s?`Evaluation done: ${s.passed}/${s.total} passed`:'Evaluation done')}
+  evRender()}finally{evBusy=false}}
+async function evShow(id){evTimerStop();const[a,b]=await Promise.all([evCall('GET','/evaluations/'+id),evCall('GET','/evaluations/'+id+'/results')]);
+ if(a.status!=200){$('#evMsg').innerHTML=msg(a);return}
+ evRun=a.body;evRows=b.status==200?b.body:[];evOpen=null;evLive=null;evFilter='all';if(evRun.status=='running')evTimerStart();else $('#evRun').disabled=false;evRender()}
+async function evVerify(){if(!evRun)return;const[a,v]=await Promise.all([evCall('GET','/evaluations/'+evRun.run_id),call(T.admin,'GET','/audit/verify')]);
+ if(a.status==200)evRun=a.body;evLive=v.status==200?v.body:null;evRender();refresh();flash(evLive&&evLive.ok&&evAncOf(evLive.anchor)!='tamper_detected'?'g':'x','Verified against the live audit log')}
+
+function evRender(){
+ const r=evRun;
+ $('#evHist').innerHTML=evHist.length?evHist.map(h=>{const s=h.summary,st=h.status=='completed'?['COMPLETED','g']:h.status=='running'?['RUNNING','bl']:[h.status.toUpperCase(),'x'];
+  return `<div class="evh ${r&&r.run_id==h.run_id?'sel':''}" onclick="evShow('${esc(h.run_id)}')"><code>${esc(h.run_id)}</code>${evPill(st[0],st[1])}<span class="t">${esc(new Date(h.created*1000).toLocaleString())} · ${esc(h.model)} · ${esc(h.suite.id)} v${esc(h.suite.version)}</span>${s?evPill(s.passed+'/'+s.total+' passed',s.failed||s.errors?'w':'g'):evPill(h.done+'/'+h.total,'')}</div>`}).join(''):'<div class="sub">No evaluations yet.</div>';
+ if(!r){$('#evProg').innerHTML=$('#evSum').innerHTML=$('#evInteg').innerHTML=$('#evResWrap').innerHTML='';return}
+ const rows=evRows,s=r.summary,c=s?{pass:s.passed,fail:s.failed,blocked:s.blocked,error:s.errors}:evTally(rows),running=r.status=='running',lat=s&&s.latency_ms;
+ const det=evTally(rows.filter(x=>x.judge=='deterministic')),dn=rows.filter(x=>x.judge=='deterministic').length,hr=evTally(rows.filter(x=>x.judge=='heuristic')),hn=rows.filter(x=>x.judge=='heuristic').length;
+ $('#evProg').innerHTML=running?`<div class="sub">Running · ${r.done}/${r.total} cases · model ${esc(r.model)} · suite ${esc(r.suite.id)} v${esc(r.suite.version)}</div><div class="bar"><i style="width:${Math.round(100*r.done/Math.max(1,r.total))}%"></i></div>`
+  :`<div class="sub">${r.status=='completed'?'Finished':'Stopped before finishing ('+esc(r.status)+')'} · ${r.done}/${r.total} cases · model ${esc(r.model)} · suite ${esc(r.suite.id)} v${esc(r.suite.version)} · started by ${esc(r.created_by)}</div>`;
+ $('#evSum').innerHTML=[evS(r.total,'Total tests',evPill(r.done+'/'+r.total+' DONE','')),evS(c.pass,'Passed',evPill('PASS','g')),evS(c.fail,'Failed',evPill('FAIL',c.fail?'x':'')),
+  evS(c.blocked,'Blocked',evPill('GATEWAY REFUSED',c.blocked?'bl':'')),evS(c.error,'Errors',evPill('INFRASTRUCTURE',c.error?'w':'')),
+  evS(lat?lat.p50+' ms':'—','Latency p50',evPill(lat?`p95 ${lat.p95} · max ${lat.max} ms`:'NO MODEL CALLS','')),
+  evS(`${det.pass}/${dn}`,'Gateway controls',evPill('DETERMINISTIC',det.fail||det.error?'x':'g')),evS(`${hr.pass}/${hn}`,'Model answers',evPill('HEURISTIC · SCREEN ONLY','w'))].join('');
+ const ig=r.integrity,db=r.db_check,L=evLive;
+ const aud=ig?evPill(ig.audit.ok?`CHAIN VERIFIED · ${ig.audit.entries} entries`:'CHAIN BROKEN at #'+ig.audit.broken_at,ig.audit.ok?'g':'x'):evPill('PENDING',''),anc=ig?evAnc[ig.anchor.status]||[ig.anchor.status,'w']:['PENDING',''];
+ const dbp=!db?evPill('PENDING',''):db.digest_matches_audit===true&&db.digest_matches_run_record?evPill('RESULTS MATCH AUDIT LOG','g'):db.audit_completed_event=='not_found'?evPill('NO COMPLETION ENTRY IN AUDIT LOG','w'):evPill('RESULTS DO NOT MATCH AUDIT LOG','x');
+ $('#evInteg').innerHTML=`<h3>Verification</h3><div class="evi"><div><h3>At the end of the run</h3>${aud} ${evPill(anc[0],anc[1])}</div><div><h3>Stored results vs audit log</h3>${dbp}<div class="sub" style="margin:4px 0 0">Each row's response hash is also in the audit log, and a digest of all rows is sealed in the log.</div></div><div><h3>Right now</h3>${L?`${evPill(L.ok?'CHAIN VERIFIED':'CHAIN BROKEN',L.ok?'g':'x')} ${(a=>evPill(evAnc[a][0],evAnc[a][1]))(evAncOf(L.anchor))}`:'<span class="sub">Not checked yet.</span>'}<br><button onclick="evVerify()">↻ Verify now</button></div></div>`;
+ const f=evFilter,vis=rows.filter(x=>f=='all'||(f=='bad'&&x.status!='pass')||f==x.kind);
+ const fb=(k,l)=>`<button class="${f==k?'on':''}" onclick="evFilter='${k}';evRender()">${l}</button>`;
+ $('#evResWrap').innerHTML=`<h3>Results</h3><div class="evf">${fb('all','All ('+rows.length+')')}${fb('bad','Not passed ('+rows.filter(x=>x.status!='pass').length+')')}${fb('control','Gateway controls')}${fb('attack','Attack probes')}</div>
+ <div class="evtw"><table class="rt"><tr><th>#</th><th>Judge</th><th>Case</th><th>Category</th><th>Severity</th><th>Status</th><th>Latency</th><th>Audit</th></tr>${vis.map(x=>{const st=evSt[x.status]||[x.status,''],au=x.audit_status?evAud[x.audit_status]||[x.audit_status,'x']:null,o=evOpen==x.id;
+  return `<tr class="r ${o?'o':''}" onclick="evOpen=${o?'null':x.id};evRender()"><td>${x.seq}</td><td>${x.judge=='deterministic'?evPill('DETERMINISTIC','bl'):evPill('HEURISTIC','w')}</td><td><code>${esc(x.case_id)}</code></td><td>${esc(x.category)}</td><td>${esc(x.severity)}</td><td>${evPill(st[0],st[1])}</td><td>${x.latency_ms==null?'—':esc(x.latency_ms)+' ms'}</td><td>${au?evPill(au[0],au[1]):'—'}</td></tr>`
+  +(o?`<tr class="o"><td colspan="8"><div class="evd"><b>Expected:</b> ${esc(x.expected)}<br><b>Verdict:</b> ${esc(x.detail)}${x.response_excerpt?`<br><b>Model reply (first 200 chars):</b> <pre>${esc(x.response_excerpt)}</pre>`:''}<details><summary>Evidence</summary><pre>${esc(JSON.stringify(x.evidence,null,1))}</pre></details>${x.test_id?`<code>test ${esc(x.test_id)} · reply sha256 ${esc((x.response_sha256||'').slice(0,16))}… · audit #${esc(x.audit_seq)}</code>`:''}</div></td></tr>`:'')}).join('')}</table></div>${vis.length?'':'<div class="sub">Nothing to show.</div>'}`}
+
+(async()=>{const r=await fetch('/ui/demo-tokens').catch(()=>({ok:false}));if(!r.ok){render();$('#pConn').className='pill x';$('#pConn').textContent='DEMO TOKENS OFF (DEMO_UI=1)';return}T=await r.json();evInit();await refresh();setInterval(refresh,8000)})();
 </script></body></html>
