@@ -15,7 +15,7 @@ import json
 import sqlite3
 import time
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA_V1 = """
 CREATE TABLE tests (
@@ -82,6 +82,17 @@ CREATE TABLE eval_results (
 """
 
 
+# v3: which provider/model produced a run, whether it was the mock or a real provider, the pre-flight
+# health result, and why a run failed. NULL on runs made before v3 (shown as UNKNOWN, never guessed).
+_SCHEMA_V3 = """
+ALTER TABLE eval_runs ADD COLUMN provider TEXT;
+ALTER TABLE eval_runs ADD COLUMN provider_model TEXT;
+ALTER TABLE eval_runs ADD COLUMN provider_kind TEXT CHECK (provider_kind IN ('mock', 'real'));
+ALTER TABLE eval_runs ADD COLUMN health TEXT;
+ALTER TABLE eval_runs ADD COLUMN error TEXT;
+"""
+
+
 class Store:
     def __init__(self, path):
         self.path = path
@@ -93,7 +104,11 @@ class Store:
                 version = 1
             if version == 1:
                 c.executescript("BEGIN;" + _SCHEMA_V2 + "PRAGMA user_version = 2; COMMIT;")
-            elif version != SCHEMA_VERSION:
+                version = 2
+            if version == 2:
+                c.executescript("BEGIN;" + _SCHEMA_V3 + "PRAGMA user_version = 3; COMMIT;")
+                version = 3
+            if version != SCHEMA_VERSION:
                 # Fail closed: never run against a schema this code doesn't understand.
                 raise RuntimeError("store schema version %d, expected %d" % (version, SCHEMA_VERSION))
 
@@ -138,11 +153,17 @@ class Store:
                       (test_id, note, time.time()))
 
     # ---- evaluation runs ------------------------------------------------
-    def create_run(self, run_id, created_by, model, suite, total):
+    def create_run(self, run_id, created_by, model, suite, total, provider=None, provider_model=None, provider_kind=None):
         with self._conn() as c:
             c.execute("INSERT INTO eval_runs (run_id, status, created, created_by, model, suite_id, suite_version, "
-                      "suite_sha256, total) VALUES (?, 'running', ?, ?, ?, ?, ?, ?, ?)",
-                      (run_id, time.time(), created_by, model, suite["id"], suite["version"], suite["sha256"], total))
+                      "suite_sha256, total, provider, provider_model, provider_kind) "
+                      "VALUES (?, 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      (run_id, time.time(), created_by, model, suite["id"], suite["version"], suite["sha256"], total,
+                       provider, provider_model, provider_kind))
+
+    def set_run_health(self, run_id, health):
+        with self._conn() as c:
+            c.execute("UPDATE eval_runs SET health = ? WHERE run_id = ?", (json.dumps(health, sort_keys=True), run_id))
 
     _RESULT_COLS = ("seq", "kind", "judge", "case_id", "category", "severity", "expected", "status", "detail",
                     "evidence", "http_status", "latency_ms", "test_id", "response_sha256", "response_len",
@@ -172,16 +193,16 @@ class Store:
             out.append(d)
         return out
 
-    def finish_run(self, run_id, status, summary, integrity, digest):
+    def finish_run(self, run_id, status, summary, integrity, digest, error=None):
         with self._conn() as c:
-            c.execute("UPDATE eval_runs SET status = ?, finished = ?, summary = ?, integrity = ?, results_digest = ? "
-                      "WHERE run_id = ? AND status = 'running'",
+            c.execute("UPDATE eval_runs SET status = ?, finished = ?, summary = ?, integrity = ?, results_digest = ?, "
+                      "error = ? WHERE run_id = ? AND status = 'running'",
                       (status, time.time(), json.dumps(summary, sort_keys=True), json.dumps(integrity, sort_keys=True),
-                       digest, run_id))
+                       digest, json.dumps(error, sort_keys=True) if error else None, run_id))
 
     def _run(self, row):
         d = dict(row)
-        for k in ("summary", "integrity"):
+        for k in ("summary", "integrity", "health", "error"):
             d[k] = json.loads(d[k]) if d[k] else None
         return d
 

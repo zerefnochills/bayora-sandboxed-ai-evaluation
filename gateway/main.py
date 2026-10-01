@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 
 from audit import AuditLog
 from auth import ALGO, SECRET, require, verify
-from llm_adapters import AdapterError, ID_RE, Registry
+from llm_adapters import AdapterError, ID_RE, RateLimited, Registry
 from store import Store
 from evaluator import Runner, RunBusy, RunRefused
 from suites import SuiteRegistry
@@ -80,6 +80,9 @@ async def submit_test(body: Submit, authorization: Optional[str] = Header(None))
         raise HTTPException(422, "unknown model")
     try:
         res = await adapter.generate(body.prompt, llm_session(p.sub, body.session_id))
+    except RateLimited:
+        audit.append("llm_rate_limited", "gateway", {"model": adapter.id})
+        raise HTTPException(429, "model request limit reached")
     except AdapterError:
         audit.append("llm_error", "gateway", {"model": adapter.id})
         raise HTTPException(502, "model unavailable")
@@ -240,6 +243,19 @@ def _get_run(run_id: str) -> dict:
     return run
 
 
+@app.get("/models/{model_id}/health")
+async def model_health(model_id: str, authorization: Optional[str] = Header(None)):
+    """Probe a configured model's provider (reachable? credentials accepted? model present?) without spending
+    a generation. The result never contains the endpoint, a key or a provider response body."""
+    p = need(authorization, "eval:read")
+    adapter = MODELS.adapters.get(model_id) if ID_RE.match(model_id) else None
+    if adapter is None:
+        raise HTTPException(404, "unknown model")
+    h = await adapter.health()
+    audit.append("provider_health_checked", p.sub, {"model": adapter.id, "status": h["status"]})
+    return {"model": adapter.id, "provider": adapter.provider, "origin": adapter.origin, **h}
+
+
 @app.get("/suites")
 def list_suites(authorization: Optional[str] = Header(None)):
     need(authorization, "eval:read")
@@ -273,5 +289,4 @@ def get_evaluation(run_id: str, authorization: Optional[str] = Header(None)):
 @app.get("/evaluations/{run_id}/results")
 def get_evaluation_results(run_id: str, authorization: Optional[str] = Header(None)):
     need(authorization, "eval:read")
-    _get_run(run_id)
-    return store.results(run_id)
+    return runner.public_results(_get_run(run_id))
