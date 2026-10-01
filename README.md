@@ -101,11 +101,57 @@ Cloud/local models need egress from the gateway (it already has `admin-net`);
 local servers must be reachable from the gateway container.
 Tests without Docker: `python3 tests/adapter_test.py`.
 
+## Evaluation engine
+
+Run a whole attack suite against a model and get a scored, persisted, audited result.
+
+```
+POST /evaluations {"suite_id": "builtin-core", "model": "mock"}   -> 202 {run_id, ...}   (scope eval:run)
+GET  /evaluations/{id}            progress, summary, integrity, db_check                 (scope eval:read)
+GET  /evaluations/{id}/results    one row per case                                       (scope eval:read)
+GET  /evaluations                 history                                                (scope eval:read)
+GET  /suites                      available suites (no prompt text)                      (scope eval:read)
+```
+
+The new `evaluator` role (`eval:run`, `eval:read`) can do nothing else: it cannot use Red, Blue
+or audit routes (a control in every run checks this). The runner executes in the gateway
+process, one run at a time (a second start gets 409), and drives the gateway's **own routes**
+in-process with short-lived tokens for the actors `eval-red`, `eval-blue` and `eval-probe-*`,
+so every request takes the normal auth -> phase gate -> adapter -> store -> audit path and is
+attributable in the audit log. Attack tests are concluded after judging, so they show up in
+Blue's test list like any other concluded test.
+
+**Two kinds of verdict, never mixed**
+- *Deterministic* (12 gateway controls per run: missing/forged/expired token, Red/Blue/evaluator
+  scope separation, session isolation, phase gating, audit completeness). They check status
+  codes, store state and audit entries; a failure is a real defect.
+- *Heuristic* (the attack suite). A case-insensitive substring screen over the model's reply.
+  It misses paraphrased failures and can flag a refusal that quotes the attack. Every such
+  row is labelled HEURISTIC; treat it as a screening aid, not ground truth.
+
+Statuses: `pass`, `fail`, `blocked` (the gateway refused the request itself), `error`
+(model down, network, runner exception). Summary: totals, per-judge and per-category tallies,
+latency count/min/mean/p50/p95/max, audit-chain status and anchor status (at the end of the run).
+
+**Suites** are single JSON files in `gateway/suites/` (`format: "bayora.suite/1"`, strict
+validation, canonical sha256 recorded with every run; import/export = copy the file; an invalid
+file stops the gateway at startup). See `gateway/suites.py` for the format.
+
+**Consistency.** Each result row stores sha256 of the model reply, the same hash the audit log
+holds. A digest over all rows is stored on the run and sealed into an `evaluation_completed`
+audit entry, and `GET /evaluations/{id}` recomputes it (`db_check`), so editing a stored row
+afterwards is detected. Write order is DB then audit; a crash between them shows up in
+`db_check` as a missing completion entry. A run still `running` at startup becomes
+`interrupted` (with an audit entry). The DB itself stays mutable and unencrypted.
+
+Tests without Docker: `python3 tests/suites_test.py tests/eval_store_test.py tests/evaluator_test.py
+tests/eval_restart_test.py` (one at a time). UI: `bash tests/ui_eval_test.sh` (needs Node + jsdom, not in CI).
+
 ## Demo UI (`/ui`) — demo only
 
 Set `DEMO_UI=1` for the gateway, then open `http://127.0.0.1:8080/ui`. The page calls
 `GET /ui/demo-tokens`, which mints a fresh short-lived token per role (red/blue/admin) with
-the gateway's existing signing secret (default 15 min; `DEMO_TOKEN_TTL` seconds, clamped
+the gateway's existing signing secret (red/blue/admin/evaluator; default 15 min; `DEMO_TOKEN_TTL` seconds, clamped
 5–3600). The page refetches on a 401. The endpoint is 404 unless `DEMO_UI=1` and for any
 caller on the red/blue/model networks. It hands one browser every role, so it defeats
 tenant isolation and must never be enabled outside a demo. Real deployments are unchanged:
