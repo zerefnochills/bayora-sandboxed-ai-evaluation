@@ -8,6 +8,7 @@ Core rule: blue team cannot see a test's prompt/response until red team has
 marked that test concluded.
 """
 import hashlib
+import json
 import os
 import time
 import uuid
@@ -18,7 +19,7 @@ import logging
 
 import jwt
 from fastapi import FastAPI, Header, HTTPException, Request, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from audit import AuditLog
@@ -26,6 +27,7 @@ from auth import ALGO, SECRET, require, verify
 from llm_adapters import AdapterError, ID_RE, RateLimited, Registry
 from store import Store
 from evaluator import Runner, RunBusy, RunRefused
+import evidence
 from suites import SuiteRegistry
 
 LLM_URL = os.environ.get("LLM_URL", "http://llm:8000")
@@ -284,6 +286,38 @@ def list_evaluations(authorization: Optional[str] = Header(None)):
 def get_evaluation(run_id: str, authorization: Optional[str] = Header(None)):
     need(authorization, "eval:read")
     return runner.public_run(_get_run(run_id), with_check=True)
+
+
+def _finished_run(run_id: str) -> dict:
+    run = _get_run(run_id)
+    if run["status"] == "running":
+        raise HTTPException(409, "evaluation is still running")
+    return run
+
+
+def _evidence(run: dict) -> dict:
+    return evidence.build_bundle(runner.public_run(run, with_check=True), runner.public_results(run),
+                                 SUITES.get(run["suite_id"]), audit.tail(100000), audit.verify(),
+                                 version=os.environ.get("BAYORA_VERSION", "dev"))
+
+
+@app.get("/evaluations/{run_id}/evidence")
+def get_evidence(run_id: str, authorization: Optional[str] = Header(None)):
+    """Self-describing JSON bundle for offline checking with scripts/verify_evidence.py."""
+    need(authorization, "eval:read")
+    bundle = _evidence(_finished_run(run_id))
+    return Response(json.dumps(bundle, indent=1, sort_keys=True), media_type="application/json",
+                    headers={"Content-Disposition": 'attachment; filename="bayora-evidence-%s.json"' % run_id,
+                             "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@app.get("/evaluations/{run_id}/report")
+def get_report(run_id: str, authorization: Optional[str] = Header(None)):
+    """Printable HTML report rendered from the evidence bundle (everything escaped, CSP-locked)."""
+    need(authorization, "eval:read")
+    page = evidence.render_report(_evidence(_finished_run(run_id)))
+    return HTMLResponse(page, headers={"Content-Security-Policy": evidence.CSP, "Cache-Control": "no-store",
+                                       "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
 
 
 @app.get("/evaluations/{run_id}/results")
