@@ -1,6 +1,28 @@
 {
   "default": "mock",
   "models": [
-    {"id": "mock", "provider": "mock", "name": "Mock LLM", "kind": "mock"}
+    {"id": "mock", "provider": "mock", "name": "Mock LLM", "kind": "mock"},
+
+{  "id": "ollama-llama32",
+  "provider": "ollama",
+  "name": "Llama 3.2 (Ollama)",
+  "kind": "real",
+  "model": "llama3.2:latest",
+  "endpoint": "http://10.0.2.2:11434/v1",
+  "timeout_s": 120,
+  "connect_timeout_s": 5,
+  "max_tokens": 512,
+  "max_response_bytes": 1048576,
+  "max_concurrent": 2,
+  "max_requests_per_minute": 0,
+  "max_requests_per_run": 500
+},
+
+    {"id": "local-openai", "provider": "openai", "name": "Local OpenAI-compatible server", "kind": "local",
+     "model": "your-model-name", "endpoint": "http://host.docker.internal:8000/v1",
+     "api_key_env": "LOCAL_LLM_API_KEY", "enabled": false},
+
+    {"id": "claude", "provider": "anthropic", "name": "Claude (cloud)",
+     "model": "your-model-name", "api_key_env": "ANTHROPIC_API_KEY", "enabled": false}
   ]
 }
