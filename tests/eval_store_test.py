@@ -39,7 +39,7 @@ c = sqlite3.connect(v1); c.executescript(store_mod._SCHEMA_V1); c.execute("PRAGM
 c.execute("INSERT INTO tests VALUES ('old1','concluded','p','r',1.0,'mock',3)")
 c.execute("INSERT INTO defenses (test_id, note, created) VALUES ('old1','note',2.0)"); c.commit(); c.close()
 s = store_mod.Store(v1)
-check("opening a v1 DB upgrades it to the current schema version", raw(v1, "PRAGMA user_version")[0][0] == store_mod.SCHEMA_VERSION == 3)
+check("opening a v1 DB upgrades it to the current schema version", raw(v1, "PRAGMA user_version")[0][0] == store_mod.SCHEMA_VERSION == 4)
 check("v1 rows survive untouched", s.get_test("old1")["prompt"] == "p" and raw(v1, "SELECT note FROM defenses")[0][0] == "note")
 check("new tables exist", {r[0] for r in raw(v1, "SELECT name FROM sqlite_master WHERE type='table'")} >= {"tests", "defenses", "eval_runs", "eval_results"})
 store_mod.Store(v1); store_mod.Store(v1)
@@ -57,7 +57,7 @@ check("upgrade over a conflicting table raises", raises(lambda: store_mod.Store(
 check("...and the DB is still v1", raw(bad, "PRAGMA user_version")[0][0] == 1)
 check("...with no eval_runs table left behind (all-or-nothing)", raw(bad, "SELECT name FROM sqlite_master WHERE name='eval_runs'") == [])
 check("...and the old data is intact", raw(bad, "SELECT test_id FROM tests") == [("keep",)])
-fut = TMP + "/future.db"; store_mod.Store(fut); raw(fut, "PRAGMA user_version = 4")
+fut = TMP + "/future.db"; store_mod.Store(fut); raw(fut, "PRAGMA user_version = 5")
 check("a newer schema version refuses to start (fail closed)", raises(lambda: store_mod.Store(fut), RuntimeError))
 
 print("== run lifecycle")
@@ -106,7 +106,7 @@ c.execute("INSERT INTO eval_results (run_id, seq, kind, judge, case_id, category
 c.commit(); c.close()
 s3 = store_mod.Store(v2)
 cols = {r[1] for r in raw(v2, "PRAGMA table_info(eval_runs)")}
-check("a populated v2 DB upgrades to v3 on open", raw(v2, "PRAGMA user_version")[0][0] == 3 and {"provider", "provider_model", "provider_kind", "health", "error"} <= cols)
+check("a populated v2 DB upgrades through v3 to the current version on open", raw(v2, "PRAGMA user_version")[0][0] == store_mod.SCHEMA_VERSION and {"provider", "provider_model", "provider_kind", "health", "error"} <= cols)
 lg = s3.get_run("legacy")
 check("a pre-v3 run keeps all its data; provider fields are None (shown as UNKNOWN, never guessed)", lg["summary"] == {"passed": 25} and lg["done"] == 1 and lg["provider"] is None and lg["provider_kind"] is None and lg["health"] is None and lg["error"] is None, lg)
 bad3 = TMP + "/bad3.db"
@@ -130,7 +130,7 @@ r = s.get_run("p1")
 check("finish_run stores a structured error; summary/integrity stay empty", r["status"] == "failed" and r["error"] == {"stage": "provider_health", "status": "unreachable", "detail": "d"} and r["summary"] is None and r["integrity"] is None)
 s.finish_run("p3", "completed", {"passed": 1}, {"audit": {"ok": True}}, "d")
 check("a normal finish leaves error None", s.get_run("p3")["error"] is None)
-check("reopening a v3 DB is idempotent", store_mod.Store(d3).get_run("p1")["provider"] == "ollama" and raw(d3, "PRAGMA user_version")[0][0] == 3)
+check("reopening a v3 DB is idempotent", store_mod.Store(d3).get_run("p1")["provider"] == "ollama" and raw(d3, "PRAGMA user_version")[0][0] == store_mod.SCHEMA_VERSION)
 
 print(f"\nResult: {PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

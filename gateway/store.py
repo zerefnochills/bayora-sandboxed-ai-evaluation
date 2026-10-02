@@ -15,7 +15,7 @@ import json
 import sqlite3
 import time
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA_V1 = """
 CREATE TABLE tests (
@@ -93,6 +93,23 @@ ALTER TABLE eval_runs ADD COLUMN error TEXT;
 """
 
 
+# v4: user accounts. Passwords are stored only as salted scrypt hashes (see users.py). token_version lets an
+# admin or a password change invalidate every token already issued to the account.
+_SCHEMA_V4 = """
+CREATE TABLE users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL CHECK (role IN ('user', 'admin')),
+    active        INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+    token_version INTEGER NOT NULL DEFAULT 1,
+    created       REAL NOT NULL,
+    created_by    TEXT,
+    last_login    REAL
+);
+"""
+
+
 class Store:
     def __init__(self, path):
         self.path = path
@@ -108,6 +125,9 @@ class Store:
             if version == 2:
                 c.executescript("BEGIN;" + _SCHEMA_V3 + "PRAGMA user_version = 3; COMMIT;")
                 version = 3
+            if version == 3:
+                c.executescript("BEGIN;" + _SCHEMA_V4 + "PRAGMA user_version = 4; COMMIT;")
+                version = 4
             if version != SCHEMA_VERSION:
                 # Fail closed: never run against a schema this code doesn't understand.
                 raise RuntimeError("store schema version %d, expected %d" % (version, SCHEMA_VERSION))
@@ -212,11 +232,67 @@ class Store:
                             "FROM eval_runs r WHERE run_id = ?", (run_id,)).fetchone()
         return self._run(row) if row else None
 
-    def list_runs(self, limit=50):
+    def list_runs(self, limit=50, owner=None):
+        """Newest first. owner=None -> every run; otherwise only runs created by that principal."""
+        where, args = ("WHERE created_by = ? ", (owner,)) if owner is not None else ("", ())
         with self._conn() as c:
             rows = c.execute("SELECT r.*, (SELECT COUNT(*) FROM eval_results e WHERE e.run_id = r.run_id) AS done "
-                             "FROM eval_runs r ORDER BY created DESC, rowid DESC LIMIT ?", (limit,)).fetchall()
+                             "FROM eval_runs r " + where + "ORDER BY created DESC, rowid DESC LIMIT ?", (*args, limit)).fetchall()
         return [self._run(r) for r in rows]
+
+    # ---- users ------------------------------------------------------------
+    _USER_COLS = "id, username, role, active, token_version, created, created_by, last_login"
+
+    def count_users(self):
+        with self._conn() as c:
+            return c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+    def create_user(self, username, password_hash, role, created_by):
+        """True if created, False if the username is taken."""
+        try:
+            with self._conn() as c:
+                c.execute("INSERT INTO users (username, password_hash, role, created, created_by) VALUES (?, ?, ?, ?, ?)",
+                          (username, password_hash, role, time.time(), created_by))
+            return True
+        except sqlite3.IntegrityError as e:
+            if "UNIQUE" in str(e):
+                return False
+            raise
+
+    def get_user(self, username, with_hash=False):
+        with self._conn() as c:
+            row = c.execute("SELECT %s%s FROM users WHERE username = ?" % (self._USER_COLS, ", password_hash" if with_hash else ""),
+                            (username,)).fetchone()
+        return dict(row) if row else None
+
+    def list_users(self):
+        with self._conn() as c:
+            return [dict(r) for r in c.execute("SELECT %s FROM users ORDER BY id" % self._USER_COLS)]
+
+    def set_user_fields(self, username, role=None, active=None):
+        sets, args = [], []
+        if role is not None:
+            sets.append("role = ?"); args.append(role)
+        if active is not None:
+            sets.append("active = ?"); args.append(1 if active else 0)
+        if not sets:
+            return False
+        sets.append("token_version = token_version + 1")        # any change to role/active invalidates old tokens
+        with self._conn() as c:
+            return c.execute("UPDATE users SET %s WHERE username = ?" % ", ".join(sets), (*args, username)).rowcount == 1
+
+    def set_password(self, username, password_hash):
+        with self._conn() as c:
+            return c.execute("UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE username = ?",
+                             (password_hash, username)).rowcount == 1
+
+    def touch_login(self, username):
+        with self._conn() as c:
+            c.execute("UPDATE users SET last_login = ? WHERE username = ?", (time.time(), username))
+
+    def count_active_admins(self):
+        with self._conn() as c:
+            return c.execute("SELECT COUNT(*) FROM users WHERE role = 'admin' AND active = 1").fetchone()[0]
 
     def interrupt_running(self):
         """Startup recovery: a run still 'running' belongs to a process that died. Returns their ids."""

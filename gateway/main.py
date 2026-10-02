@@ -8,6 +8,7 @@ Core rule: blue team cannot see a test's prompt/response until red team has
 marked that test concluded.
 """
 import hashlib
+import hmac
 import json
 import os
 import time
@@ -28,6 +29,7 @@ from llm_adapters import AdapterError, ID_RE, RateLimited, Registry
 from store import Store
 from evaluator import Runner, RunBusy, RunRefused
 import evidence
+import users
 from suites import SuiteRegistry
 
 LLM_URL = os.environ.get("LLM_URL", "http://llm:8000")
@@ -44,8 +46,20 @@ def sha(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+def _check_account(p):
+    """Tokens for web-app accounts ("user:<name>") die with the account: disabled, role changed, or password
+    changed/reset (token_version bumped) all make an old token worthless immediately."""
+    u = store.get_user(p.sub[len(users.USER_PREFIX):])
+    if (u is None or not u["active"] or p.claims.get("ver") != u["token_version"] or p.claims.get("role") != u["role"]
+            or not p.scope <= set(users.ROLE_SCOPES[u["role"]])):
+        raise HTTPException(401, "session is no longer valid")
+
+
 def need(authorization, scope):
-    return require(authorization, scope, audit=audit)
+    p = require(authorization, scope, audit=audit)       # one verification path: signature, expiry, scope
+    if p.sub.startswith(users.USER_PREFIX):
+        _check_account(p)
+    return p
 
 
 def get_test(test_id: str) -> dict:
@@ -217,9 +231,9 @@ def ui():
 SUITES = SuiteRegistry.load(os.environ.get("SUITES_DIR", os.path.join(os.path.dirname(__file__), "suites")))
 
 
-def _mint(sub: str, scope: list, ttl: int = 120, key: Optional[str] = None) -> str:
+def _mint(sub: str, scope: list, ttl: int = 120, key: Optional[str] = None, claims: Optional[dict] = None) -> str:
     now = int(time.time())
-    return jwt.encode({"sub": sub, "scope": scope, "iat": now, "exp": now + ttl, "jti": uuid.uuid4().hex},
+    return jwt.encode({**(claims or {}), "sub": sub, "scope": scope, "iat": now, "exp": now + ttl, "jti": uuid.uuid4().hex},
                       key or SECRET, algorithm=ALGO)
 
 
@@ -238,9 +252,14 @@ class EvalRequest(BaseModel):
     model: Optional[str] = Field(default=None, max_length=40, pattern=r"^[A-Za-z0-9_-]+$")
 
 
-def _get_run(run_id: str) -> dict:
+def _can_see_all(p) -> bool:
+    return "eval:admin" in p.scope
+
+
+def _get_run(run_id: str, p=None) -> dict:
+    """404 (never 403) for a run the caller does not own, so run ids cannot be probed."""
     run = store.get_run(run_id)
-    if run is None:
+    if run is None or (p is not None and not _can_see_all(p) and run["created_by"] != p.sub):
         raise HTTPException(404, "unknown evaluation")
     return run
 
@@ -270,7 +289,10 @@ async def start_evaluation(body: EvalRequest, authorization: Optional[str] = Hea
     try:
         run = runner.start(p.sub, body.model, body.suite_id)
     except RunBusy as e:
-        raise HTTPException(409, "an evaluation is already running: " + str(e.run_id))
+        active = store.get_run(e.run_id) if e.run_id else None
+        mine = active is not None and (_can_see_all(p) or active["created_by"] == p.sub)
+        raise HTTPException(409, ("an evaluation is already running: " + str(e.run_id)) if mine
+                            else "another evaluation is running; try again shortly")
     except RunRefused as e:
         raise HTTPException(422, str(e))
     return runner.public_run(run)
@@ -278,18 +300,18 @@ async def start_evaluation(body: EvalRequest, authorization: Optional[str] = Hea
 
 @app.get("/evaluations")
 def list_evaluations(authorization: Optional[str] = Header(None)):
-    need(authorization, "eval:read")
-    return [runner.public_run(r) for r in store.list_runs()]
+    p = need(authorization, "eval:read")
+    return [runner.public_run(r) for r in store.list_runs(owner=None if _can_see_all(p) else p.sub)]
 
 
 @app.get("/evaluations/{run_id}")
 def get_evaluation(run_id: str, authorization: Optional[str] = Header(None)):
-    need(authorization, "eval:read")
-    return runner.public_run(_get_run(run_id), with_check=True)
+    p = need(authorization, "eval:read")
+    return runner.public_run(_get_run(run_id, p), with_check=True)
 
 
-def _finished_run(run_id: str) -> dict:
-    run = _get_run(run_id)
+def _finished_run(run_id: str, p) -> dict:
+    run = _get_run(run_id, p)
     if run["status"] == "running":
         raise HTTPException(409, "evaluation is still running")
     return run
@@ -304,8 +326,8 @@ def _evidence(run: dict) -> dict:
 @app.get("/evaluations/{run_id}/evidence")
 def get_evidence(run_id: str, authorization: Optional[str] = Header(None)):
     """Self-describing JSON bundle for offline checking with scripts/verify_evidence.py."""
-    need(authorization, "eval:read")
-    bundle = _evidence(_finished_run(run_id))
+    p = need(authorization, "eval:read")
+    bundle = _evidence(_finished_run(run_id, p))
     return Response(json.dumps(bundle, indent=1, sort_keys=True), media_type="application/json",
                     headers={"Content-Disposition": 'attachment; filename="bayora-evidence-%s.json"' % run_id,
                              "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
@@ -314,13 +336,223 @@ def get_evidence(run_id: str, authorization: Optional[str] = Header(None)):
 @app.get("/evaluations/{run_id}/report")
 def get_report(run_id: str, authorization: Optional[str] = Header(None)):
     """Printable HTML report rendered from the evidence bundle (everything escaped, CSP-locked)."""
-    need(authorization, "eval:read")
-    page = evidence.render_report(_evidence(_finished_run(run_id)))
+    p = need(authorization, "eval:read")
+    page = evidence.render_report(_evidence(_finished_run(run_id, p)))
     return HTMLResponse(page, headers={"Content-Security-Policy": evidence.CSP, "Cache-Control": "no-store",
                                        "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
 
 
 @app.get("/evaluations/{run_id}/results")
 def get_evaluation_results(run_id: str, authorization: Optional[str] = Header(None)):
-    need(authorization, "eval:read")
-    return runner.public_results(_get_run(run_id))
+    p = need(authorization, "eval:read")
+    return runner.public_results(_get_run(run_id, p))
+
+
+# ---------------- accounts (web app logins) ----------------
+# Account tokens are ordinary scoped JWTs ("user:<name>", scopes from users.ROLE_SCOPES) plus role and
+# token_version claims that need() re-checks against the account on every request. See users.py.
+USER_TTL = int(os.environ.get("USER_TOKEN_TTL", "3600"))
+SIGNUP_OPEN = os.environ.get("ALLOW_SIGNUP") == "1"
+GUARD_USER, GUARD_IP, GUARD_SIGNUP = users.LoginGuard(5, 900), users.LoginGuard(30, 900), users.LoginGuard(10, 3600)
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class BootstrapRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class NewUser(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
+    role: str = Field(default="user", pattern="^(user|admin)$")
+
+
+class UserPatch(BaseModel):
+    role: Optional[str] = Field(default=None, pattern="^(user|admin)$")
+    active: Optional[bool] = None
+
+
+class PasswordChange(BaseModel):
+    old_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=1, max_length=256)
+
+
+class PasswordReset(BaseModel):
+    new_password: str = Field(min_length=1, max_length=256)
+
+
+def _issue(u: dict) -> dict:
+    token = _mint(users.USER_PREFIX + u["username"], users.ROLE_SCOPES[u["role"]], USER_TTL,
+                  claims={"role": u["role"], "ver": u["token_version"]})
+    return {"token": token, "expires_in": USER_TTL, "user": {"username": u["username"], "role": u["role"]}}
+
+
+def _ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _policy(fn, *a):
+    try:
+        return fn(*a)
+    except users.PolicyError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.get("/auth/status")
+def auth_status():
+    return {"bootstrap_needed": store.count_users() == 0, "signup_open": SIGNUP_OPEN}
+
+
+@app.post("/auth/bootstrap")
+def auth_bootstrap(body: BootstrapRequest, request: Request):
+    """Create the FIRST admin. Needs the code from users.bootstrap_code(); closed once any account exists."""
+    if store.count_users() > 0:
+        raise HTTPException(409, "already set up")
+    ip = "boot:" + _ip(request)
+    if GUARD_IP.check(ip):
+        raise HTTPException(429, "too many attempts")
+    if not hmac.compare_digest(body.code, users.bootstrap_code(SECRET)):
+        GUARD_IP.fail(ip)
+        audit.append("bootstrap_failed", "anonymous", {})
+        raise HTTPException(403, "invalid setup code")
+    name = _policy(users.check_username, body.username.strip().lower())
+    _policy(users.check_password, body.password, name)
+    if not store.create_user(name, users.hash_password(body.password), "admin", "bootstrap"):
+        raise HTTPException(409, "already set up")
+    audit.append("user_created", "bootstrap", {"username": name, "role": "admin"})
+    return _issue(store.get_user(name))
+
+
+@app.post("/auth/login")
+def auth_login(body: LoginRequest, request: Request):
+    name = body.username.strip().lower()
+    ukey, ikey = "u:" + name[:64], "ip:" + _ip(request)
+    wait = max(GUARD_USER.check(ukey), GUARD_IP.check(ikey))
+    if wait:
+        audit.append("login_failed", "anonymous", {"username": name[:32], "reason": "throttled"})
+        raise HTTPException(429, "too many failed attempts; try again later", headers={"Retry-After": str(wait)})
+    u = store.get_user(name, with_hash=True)
+    good = users.verify_password(body.password, u["password_hash"] if u else users.DUMMY_HASH)   # same work either way
+    if not (u and good and u["active"]):
+        GUARD_USER.fail(ukey)
+        GUARD_IP.fail(ikey)
+        audit.append("login_failed", "anonymous", {"username": name[:32], "reason": "disabled" if (u and good) else "bad credentials"})
+        raise HTTPException(401, "invalid username or password")
+    GUARD_USER.clear(ukey)
+    store.touch_login(name)
+    audit.append("user_login", users.USER_PREFIX + name, {"role": u["role"]})
+    return _issue(store.get_user(name))
+
+
+@app.post("/auth/register", status_code=201)
+def auth_register(body: LoginRequest, request: Request):
+    """Self-service signup. Off unless ALLOW_SIGNUP=1 (then 404, so its existence is not advertised)."""
+    if not SIGNUP_OPEN:
+        raise HTTPException(404, "not found")
+    ip = "signup:" + _ip(request)
+    if GUARD_SIGNUP.check(ip):
+        raise HTTPException(429, "too many attempts")
+    GUARD_SIGNUP.fail(ip)
+    name = _policy(users.check_username, body.username.strip().lower())
+    _policy(users.check_password, body.password, name)
+    if not store.create_user(name, users.hash_password(body.password), "user", "signup"):
+        raise HTTPException(409, "username is taken")
+    audit.append("user_created", "signup", {"username": name, "role": "user"})
+    return _issue(store.get_user(name))
+
+
+@app.get("/auth/me")
+def auth_me(authorization: Optional[str] = Header(None)):
+    p = need(authorization, "eval:read")
+    if not p.sub.startswith(users.USER_PREFIX):
+        raise HTTPException(403, "not an account token")
+    u = store.get_user(p.sub[len(users.USER_PREFIX):])
+    return {**users.public_user(u), "scope": sorted(p.scope)}
+
+
+@app.post("/auth/change-password")
+def auth_change_password(body: PasswordChange, request: Request, authorization: Optional[str] = Header(None)):
+    p = need(authorization, "eval:read")
+    if not p.sub.startswith(users.USER_PREFIX):
+        raise HTTPException(403, "not an account token")
+    name = p.sub[len(users.USER_PREFIX):]
+    ukey = "u:" + name
+    if GUARD_USER.check(ukey):
+        raise HTTPException(429, "too many failed attempts; try again later")
+    u = store.get_user(name, with_hash=True)
+    if not users.verify_password(body.old_password, u["password_hash"]):
+        GUARD_USER.fail(ukey)
+        audit.append("password_change_failed", p.sub, {})
+        raise HTTPException(401, "current password is wrong")
+    _policy(users.check_password, body.new_password, name)
+    store.set_password(name, users.hash_password(body.new_password))
+    audit.append("password_changed", p.sub, {})
+    return _issue(store.get_user(name))   # every older token is now invalid; this one is the new session
+
+
+def _target(username: str) -> dict:
+    u = store.get_user(username) if users.USERNAME_RE.match(username) else None
+    if u is None:
+        raise HTTPException(404, "unknown user")
+    return u
+
+
+@app.get("/admin/users")
+def admin_list_users(authorization: Optional[str] = Header(None)):
+    need(authorization, "user:admin")
+    return [users.public_user(u) for u in store.list_users()]
+
+
+@app.post("/admin/users", status_code=201)
+def admin_create_user(body: NewUser, authorization: Optional[str] = Header(None)):
+    p = need(authorization, "user:admin")
+    name = _policy(users.check_username, body.username.strip().lower())
+    _policy(users.check_password, body.password, name)
+    if not store.create_user(name, users.hash_password(body.password), body.role, p.sub):
+        raise HTTPException(409, "username is taken")
+    audit.append("user_created", p.sub, {"username": name, "role": body.role})
+    return users.public_user(store.get_user(name))
+
+
+@app.patch("/admin/users/{username}")
+def admin_update_user(username: str, body: UserPatch, authorization: Optional[str] = Header(None)):
+    p = need(authorization, "user:admin")
+    u = _target(username)
+    demoting = u["role"] == "admin" and u["active"] and (body.role == "user" or body.active is False)
+    if demoting and store.count_active_admins() <= 1:
+        raise HTTPException(409, "cannot remove the last active admin")
+    store.set_user_fields(username, body.role, body.active)
+    audit.append("user_updated", p.sub, {"username": username, **({"role": body.role} if body.role else {}),
+                                         **({"active": body.active} if body.active is not None else {})})
+    return users.public_user(store.get_user(username))
+
+
+@app.post("/admin/users/{username}/reset-password")
+def admin_reset_password(username: str, body: PasswordReset, authorization: Optional[str] = Header(None)):
+    p = need(authorization, "user:admin")
+    _target(username)
+    _policy(users.check_password, body.new_password, username)
+    store.set_password(username, users.hash_password(body.new_password))
+    audit.append("password_reset", p.sub, {"username": username})
+    return {"ok": True}
+
+
+@app.get("/admin/overview")
+def admin_overview(authorization: Optional[str] = Header(None)):
+    need(authorization, "user:admin")
+    us, runs = store.list_users(), store.list_runs(limit=100000)
+    v = audit.verify()
+    day = time.time() - 86400
+    count = lambda key: {k: sum(1 for r in runs if (r[key[0]] or "unknown") == k) for k in sorted({(r[key[0]] or "unknown") for r in runs})}
+    return {"generated": time.time(),
+            "users": {"total": len(us), "active": sum(u["active"] for u in us), "admins": sum(u["role"] == "admin" and u["active"] for u in us)},
+            "runs": {"total": len(runs), "last_24h": sum(r["created"] >= day for r in runs), "by_status": count(("status",)),
+                     "by_origin": count(("provider_kind",)), "running": runner.active_run},
+            "audit": {"ok": v["ok"], "entries": v["entries"], "anchor": {"status": __import__("evaluator").anchor_verification(v["anchor"]), **v["anchor"]}},
+            "models": [{"id": m["id"], "name": m["name"], "origin": m["origin"], "configured": m["configured"]} for m in MODELS.public()]}

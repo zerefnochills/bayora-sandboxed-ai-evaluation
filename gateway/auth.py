@@ -26,11 +26,12 @@ SECRET = os.environ["JWT_SECRET"]
 
 
 class Principal:
-    __slots__ = ("sub", "scope")
+    __slots__ = ("sub", "scope", "claims")
 
-    def __init__(self, sub: str, scope: list):
+    def __init__(self, sub: str, scope: list, claims: Optional[dict] = None):
         self.sub = sub
         self.scope = set(scope)
+        self.claims = claims or {}
 
 
 def verify(authorization: Optional[str]) -> Principal:
@@ -47,7 +48,7 @@ def verify(authorization: Optional[str]) -> Principal:
     scope = claims.get("scope")
     if not sub or not isinstance(scope, list):
         raise HTTPException(401, "malformed token")
-    return Principal(sub, scope)
+    return Principal(sub, scope, claims)
 
 
 def require(authorization: Optional[str], needed_scope: str, audit=None) -> Principal:
