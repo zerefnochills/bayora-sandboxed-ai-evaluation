@@ -7,10 +7,12 @@ here.
 Core rule: blue team cannot see a test's prompt/response until red team has
 marked that test concluded.
 """
+import base64
 import hashlib
 import hmac
 import json
 import os
+import re
 import time
 import uuid
 from typing import Optional
@@ -556,3 +558,26 @@ def admin_overview(authorization: Optional[str] = Header(None)):
                      "by_origin": count(("provider_kind",)), "running": runner.active_run},
             "audit": {"ok": v["ok"], "entries": v["entries"], "anchor": {"status": __import__("evaluator").anchor_verification(v["anchor"]), **v["anchor"]}},
             "models": [{"id": m["id"], "name": m["name"], "origin": m["origin"], "configured": m["configured"]} for m in MODELS.public()]}
+
+
+# ---------------- the web app (/app) ----------------
+# Real sign-in, evaluations, reports and the admin area. Unlike /ui (a demo console that mints demo tokens)
+# this page never needs DEMO_UI. It is locked down: no external resources, one inline script whose hash is
+# the only script the CSP allows, and the page builds its DOM with textContent (no innerHTML).
+def _load_app_page():
+    page = open(os.path.join(UI_DIR, "app.html"), encoding="utf-8").read()
+    script = re.search(r"<script>(.*?)</script>", page, re.S).group(1)
+    digest = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+    csp = ("default-src 'none'; script-src 'sha256-%s'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:; "
+           "base-uri 'none'; form-action 'none'; frame-ancestors 'none'" % digest)
+    return page, csp
+
+
+APP_PAGE, APP_CSP = _load_app_page()
+
+
+@app.get("/app")
+def web_app():
+    return HTMLResponse(APP_PAGE, headers={"Content-Security-Policy": APP_CSP, "Cache-Control": "no-store",
+                                           "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
+                                           "Referrer-Policy": "no-referrer"})

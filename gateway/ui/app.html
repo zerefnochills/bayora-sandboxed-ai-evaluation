@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bayora</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='black'/%3E%3Cpath d='M10 8h7a4 4 0 010 8h-7zm0 8h8a4 4 0 010 8h-8z' fill='none' stroke='white' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root{--line:#d4d4d4;--mut:#555;--card:#f2f2f2}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:#000;font:15px/1.55 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.serif,h1,h2,h3{font-family:Georgia,"Times New Roman",serif;font-weight:400}
+h1{font-size:44px;line-height:1.05;margin:0 0 6px}h2{font-size:30px;margin:0 0 12px}h3{font-size:20px;margin:22px 0 8px}
+header{position:sticky;top:0;z-index:5;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;padding:10px 24px;flex-wrap:wrap}
+.logo{font:26px Georgia,serif;margin-right:auto;display:flex;align-items:center;gap:10px}.logo b{width:28px;height:28px;border-radius:8px;background:#000;color:#fff;display:grid;place-items:center;font-size:18px;font-weight:400}
+nav{display:flex;gap:4px;flex-wrap:wrap}nav button{border:0;background:none;padding:8px 14px;border-radius:99px;font:inherit;font-weight:500;color:var(--mut);cursor:pointer}nav button:hover{color:#000}nav button.on{background:#000;color:#fff}
+main{max-width:1040px;margin:0 auto;padding:36px 24px 80px}
+.narrow{max-width:420px;margin:8vh auto 0}
+button.b,a.b{display:inline-flex;align-items:center;gap:8px;border:1px solid #000;background:#fff;color:#000;border-radius:99px;padding:8px 18px;font:inherit;font-weight:500;cursor:pointer;text-decoration:none;transition:background .2s,color .2s}
+button.b:hover,a.b:hover{background:#000;color:#fff}button.b.p{background:#000;color:#fff}button.b.p:hover{background:#fff;color:#000}button.b:disabled{opacity:.4;cursor:default}
+button.b.s{padding:3px 12px;font-size:13px}
+input,select,textarea{width:100%;font:inherit;color:#000;background:#fff;border:1px solid #000;padding:10px 12px;border-radius:0}
+label{display:block;font-weight:500;margin:14px 0 4px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}.row>*{flex:1;min-width:180px}.row>.b{flex:none}
+.tip{border:1px solid #000;padding:10px 14px;margin:14px 0;display:flex;gap:10px;align-items:baseline;animation:fade .4s}
+.tip b{font-weight:700}@keyframes fade{from{opacity:0;transform:translateY(-4px)}}
+.err{background:#000;color:#fff;padding:10px 14px;margin:12px 0}.ok{border-left:4px solid #000;padding:6px 12px;margin:12px 0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:14px 0}.card{border:1px solid #000;padding:12px 14px}.card span{display:block;color:var(--mut);font-size:13px}.card b{display:block;font:400 28px Georgia,serif}.card.bad{background:#000;color:#fff}.card.bad span{color:#fff}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mut);font-weight:500;border-bottom:1px solid #000}tr.fl td{background:#000;color:#fff}tr.clk{cursor:pointer}tr.clk:hover td{background:var(--card)}tr.fl:hover td{background:#000}
+.pill{display:inline-block;border:1px solid #000;border-radius:99px;padding:1px 10px;font-size:12px;font-weight:700;white-space:nowrap}.pill.k{background:#000;color:#fff}.pill.m{border-style:dashed}
+.bar{height:8px;background:var(--card);margin:8px 0}.bar i{display:block;height:100%;background:#000;width:0;transition:width .4s}
+.mut{color:var(--mut)}code{font:12px ui-monospace,Menlo,Consolas,monospace;overflow-wrap:anywhere}pre{margin:6px 0;white-space:pre-wrap;border-left:3px solid #000;padding-left:10px;font:12px ui-monospace,Menlo,Consolas,monospace}
+.scroll{overflow-x:auto}small{color:var(--mut)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header><span class="logo"><b>B</b>Bayora</span><nav id="nav"></nav></header>
+<main id="app"></main>
+<script>
+const S={token:null,user:null,view:'evaluate',models:[],suites:[],runs:[],run:null,rows:[],timer:null,msg:null};
+try{S.token=sessionStorage.getItem('bayora_token')}catch(e){}
+const $=s=>document.querySelector(s);
+function h(tag,props,...kids){const e=document.createElement(tag);for(const[k,v]of Object.entries(props||{})){if(k==='class')e.className=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(k,v)}for(const kid of kids.flat(9)){if(kid==null||kid===false)continue;e.append(kid.nodeType?kid:document.createTextNode(String(kid)))}return e}
+const pill=(t,c)=>h('span',{class:'pill '+(c||'')},t);
+const origin=o=>o==='real'?pill('REAL PROVIDER','k'):o==='mock'?pill('MOCK MODEL','m'):pill('PROVIDER UNKNOWN','m');
+const when=t=>t?new Date(t*1000).toLocaleString():'-';
+const isAdmin=()=>S.user&&S.user.role==='admin';
+async function api(method,path,body,raw){const r=await fetch(path,{method,headers:{...(S.token?{Authorization:'Bearer '+S.token}:{}),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
+ if(r.status===401&&S.token&&!path.startsWith('/auth/login')&&!path.startsWith('/auth/change')){out('Your session ended. Please sign in again.');return{status:401,data:null}}
+ if(raw)return r;let d=null;try{d=await r.json()}catch(e){}return{status:r.status,data:d,res:r}}
+const why=r=>{const d=r.data&&r.data.detail;return typeof d==='string'?d:Array.isArray(d)?'Please check the form: '+d.map(x=>x.msg).join('; '):'Something went wrong ('+r.status+')'};
+function out(msg){S.token=null;S.user=null;stopPoll();try{sessionStorage.removeItem('bayora_token')}catch(e){}S.msg=msg||null;render()}
+function setSession(d){S.token=d.token;S.user=d.user;try{sessionStorage.setItem('bayora_token',d.token)}catch(e){}S.msg=null}
+function flash(kind,text){const el=$('#flash');if(el)el.replaceChildren(h('div',{class:kind},text))}
+function stopPoll(){if(S.timer){clearInterval(S.timer);S.timer=null}}
+function tip(title,text){return h('div',{class:'tip'},h('b',null,title),h('span',null,text))}
+
+/* ---------- logged-out views ---------- */
+async function viewLoggedOut(){
+ const st=(await api('GET','/auth/status')).data||{};
+ const setup=!!st.bootstrap_needed;let mode=setup?'setup':'login';
+ const draw=()=>{
+  const f={u:h('input',{id:'u',autocomplete:'username',maxlength:64}),p:h('input',{id:'p',type:'password',autocomplete:mode==='login'?'current-password':'new-password',maxlength:256}),c:h('input',{id:'c',autocomplete:'off',maxlength:64})};
+  const go=async()=>{const body={username:f.u.value,password:f.p.value};let path='/auth/login';if(mode==='setup'){path='/auth/bootstrap';body.code=f.c.value}else if(mode==='signup')path='/auth/register';
+   const r=await api('POST',path,body);if(r.status===200||r.status===201){setSession(r.data);S.view='evaluate';await load();render()}else flash('err',why(r))};
+  const title=mode==='setup'?'Set up Bayora':mode==='signup'?'Create an account':'Sign in';
+  $('#app').replaceChildren(h('div',{class:'narrow'},h('h1',null,title),
+   S.msg?h('div',{class:'ok'},S.msg):null,
+   mode==='setup'?tip('First run','Create the first administrator. Get the setup code on the server with: docker compose exec gateway python -c "import users,auth;print(users.bootstrap_code(auth.SECRET))"'):tip('Tip','Sign in to run evaluations on a model and print a report of what was found.'),
+   h('div',{id:'flash'}),
+   mode==='setup'?[h('label',{for:'c'},'Setup code'),f.c]:null,
+   h('label',{for:'u'},'Username'),f.u,h('label',{for:'p'},'Password'),f.p,
+   mode!=='login'?h('p',{class:'mut'},'At least 10 characters, and it must not contain your username.'):null,
+   h('p',null,h('button',{class:'b p',onclick:go},title)),
+   !setup&&st.signup_open?h('p',null,h('button',{class:'b s',onclick:()=>{mode=mode==='login'?'signup':'login';draw()}},mode==='login'?'Create an account':'Back to sign in')):null));
+  [f.u,f.p,f.c].forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter')go()}));f.u.focus()};
+ draw()}
+
+/* ---------- data ---------- */
+async function load(){
+ const [m,s,r]=await Promise.all([api('GET','/models'),api('GET','/suites'),api('GET','/evaluations')]);
+ S.models=m.data||[];S.suites=s.data||[];S.runs=r.data||[];
+ const me=await api('GET','/auth/me');if(me.status===200)S.user={username:me.data.username,role:me.data.role}}
+
+/* ---------- shell ---------- */
+function shell(...content){
+ const tabs=[['evaluate','Evaluate'],['runs',isAdmin()?'All runs':'My runs']].concat(isAdmin()?[['overview','Overview'],['users','Users']]:[],[['account','Account']]);
+ $('#nav').replaceChildren(...tabs.map(([k,l])=>h('button',{class:S.view===k?'on':'',onclick:()=>{S.view=k;S.run=null;stopPoll();load().then(render)}},l)),h('button',{onclick:()=>out()},'Sign out ('+S.user.username+')'));
+ $('#app').replaceChildren(h('div',{id:'flash'}),...content)}
+
+/* ---------- evaluate ---------- */
+function viewEvaluate(){
+ const ms=h('select',{id:'model'},S.models.map(m=>h('option',{value:m.id,disabled:!m.configured,selected:m.default},(m.origin==='mock'?'[MOCK] ':'[REAL] ')+m.name+(m.model?' / '+m.model:'')+(m.configured?'':' (key not set)'))));
+ const ss=h('select',{id:'suite'},S.suites.map(x=>h('option',{value:x.id},x.name+' v'+x.version+' ('+x.attacks+' attacks)')));
+ const info=h('p',{class:'mut'});const upd=()=>{const m=S.models.find(x=>x.id===ms.value);const s=S.suites.find(x=>x.id===ss.value);info.replaceChildren(m?origin(m.origin):'',' ',m?m.flavor:'',' ',s?s.description:'')};ms.onchange=ss.onchange=upd;
+ const hc=h('span',{class:'mut'});
+ const check=async()=>{hc.textContent='Checking...';const r=await api('GET','/models/'+encodeURIComponent(ms.value)+'/health');hc.replaceChildren(...(r.status===200?[pill(r.data.status.replace(/_/g,' ').toUpperCase(),r.data.ok?'':'k'),' '+r.data.detail]:[why(r)]))};
+ const run=async()=>{const r=await api('POST','/evaluations',{suite_id:ss.value,model:ms.value});if(r.status!==202)return flash('err',why(r));S.run=r.data;S.rows=[];S.view='evaluate';poll();render()};
+ shell(h('h2',null,'Evaluate a model'),
+  tip('Step 1','Pick the model and the attack suite, then run it. The model you pick decides what the report is about.'),
+  h('div',{class:'row'},h('div',null,h('label',null,'Model'),ms),h('div',null,h('label',null,'Attack suite'),ss),h('button',{class:'b',onclick:check},'Test connection'),h('button',{class:'b p',id:'run',disabled:!!(S.run&&S.run.status==='running'),onclick:run},'Run evaluation')),
+  h('div',null,hc),info,
+  S.run?runPanel():h('p',{class:'mut'},'Evaluations run one at a time. A run takes a few seconds on the mock model and longer on a real one.'));upd()}
+function poll(){stopPoll();S.timer=setInterval(async()=>{if(!S.run)return stopPoll();const[a,b]=await Promise.all([api('GET','/evaluations/'+S.run.run_id),api('GET','/evaluations/'+S.run.run_id+'/results')]);
+ if(a.status!==200)return stopPoll();S.run=a.data;S.rows=b.data||[];if(S.run.status!=='running'){stopPoll();await load()}render()},1000)}
+const sc=(l,v,bad)=>h('div',{class:'card'+(bad?' bad':'')},h('span',null,l),h('b',null,v));
+function runPanel(){const r=S.run;if(!r)return null;const sm=r.summary;
+ const head=h('h3',null,'Run '+r.run_id,' ',origin(r.provider_kind),' ',pill(r.status.toUpperCase(),r.status==='completed'?'':'k'));
+ const meta=h('p',{class:'mut'},(r.provider||'?')+' / '+(r.provider_model||r.model)+', suite '+r.suite.id+' v'+r.suite.version+', started '+when(r.created));
+ if(r.status==='running')return h('div',null,head,meta,h('div',{class:'bar'},h('i',{style:'width:'+Math.round(100*r.done/Math.max(1,r.total))+'%'})),h('p',null,r.done+' of '+r.total+' cases done.'));
+ if(r.error)return h('div',null,head,meta,h('div',{class:'err'},'No attacks were sent. The provider failed its health check ('+r.error.status.replace(/_/g,' ')+'): '+r.error.detail+'. This is not a verdict about the model.'),runActions(r));
+ const det=sm.by_judge.deterministic,hr=sm.by_judge.heuristic,n=o=>o.pass+o.fail+o.blocked+o.error;
+ return h('div',null,head,meta,h('div',{class:'cards'},sc('Gateway controls (checked by code)',det.pass+' of '+n(det),det.fail>0),sc('Attack probes (heuristic)',hr.pass+' passed of '+n(hr)),sc('Probes flagged',hr.fail,hr.fail>0),sc('Errors or blocked',sm.errors+sm.blocked),sc('Audit chain',r.integrity&&r.integrity.audit.ok?'Verified':'Check',!(r.integrity&&r.integrity.audit.ok))),
+  r.status==='completed'&&sm.failed?tip('Next','Flagged probes are signals for human review, not proof of a flaw. The report explains each one and what to consider.'):null,
+  runActions(r),resultsTable())}
+function runActions(r){return h('p',null,h('button',{class:'b p',onclick:()=>openReport(r.run_id)},'Open printable report'),' ',h('button',{class:'b',onclick:()=>download(r.run_id)},'Download evidence'))}
+function resultsTable(){if(!S.rows.length)return null;return h('div',{class:'scroll'},h('table',null,h('thead',null,h('tr',null,['#','Case','Category','Severity','Judge','Verdict','Latency'].map(x=>h('th',null,x)))),
+ h('tbody',null,S.rows.map(x=>h('tr',{class:x.status==='fail'?'fl':''},h('td',null,x.seq),h('td',null,x.case_id),h('td',null,x.category.replace(/_/g,' ')),h('td',null,x.severity),h('td',null,x.judge==='deterministic'?'deterministic':'heuristic'),h('td',null,x.status==='fail'&&x.kind==='attack'?'FLAGGED':x.status.toUpperCase()),h('td',null,x.latency_ms==null?'-':x.latency_ms+' ms'))))))}
+async function openReport(id){const w=window.open('','_blank');const r=await api('GET','/evaluations/'+id+'/report',null,true);if(!r.ok){if(w)w.close();return flash('err','Could not open the report ('+r.status+').')}
+ const u=URL.createObjectURL(new Blob([await r.text()],{type:'text/html'}));if(w)w.location=u;else flash('err','Your browser blocked the report window. Allow pop-ups for this page.')}
+async function download(id){const r=await api('GET','/evaluations/'+id+'/evidence',null,true);if(!r.ok)return flash('err','Could not download the evidence ('+r.status+').');
+ const u=URL.createObjectURL(new Blob([await r.text()],{type:'application/json'}));const a=h('a',{href:u,download:'bayora-evidence-'+id+'.json'});document.body.append(a);a.click();a.remove();flash('ok','Evidence saved. Check it offline with: python3 scripts/verify_evidence.py bayora-evidence-'+id+'.json')}
+
+/* ---------- runs ---------- */
+async function showRun(id){const[a,b]=await Promise.all([api('GET','/evaluations/'+id),api('GET','/evaluations/'+id+'/results')]);if(a.status!==200)return flash('err',why(a));S.run=a.data;S.rows=b.data||[];render()}
+function viewRuns(){
+ if(S.run)return shell(h('p',null,h('button',{class:'b s',onclick:()=>{S.run=null;render()}},'Back to the list')),runPanel());
+ shell(h('h2',null,isAdmin()?'All runs':'My runs'),
+  S.runs.length?tip('Tip','Click a run to see its results. Reports and evidence are available for finished runs.'):tip('Nothing yet','Run an evaluation on the Evaluate tab and it will appear here.'),
+  S.runs.length?h('div',{class:'scroll'},h('table',null,h('thead',null,h('tr',null,['Started',isAdmin()?'By':null,'Model','Origin','Suite','Status','Result',''].filter(Boolean).map(x=>h('th',null,x)))),
+   h('tbody',null,S.runs.map(r=>h('tr',{class:'clk',onclick:()=>showRun(r.run_id)},h('td',null,when(r.created)),isAdmin()?h('td',null,r.created_by):null,h('td',null,r.model),h('td',null,origin(r.provider_kind)),h('td',null,r.suite.id+' v'+r.suite.version),h('td',null,r.status),
+    h('td',null,r.error?'provider '+r.error.status.replace(/_/g,' '):r.summary?r.summary.passed+' of '+r.summary.total+' passed, '+r.summary.failed+' flagged':r.done+' of '+r.total),
+    h('td',null,r.status!=='running'?h('button',{class:'b s',onclick:e=>{e.stopPropagation();openReport(r.run_id)}},'Report'):null))))))
+  :null)}
+
+/* ---------- admin ---------- */
+async function viewOverview(){const r=await api('GET','/admin/overview');if(r.status!==200)return shell(h('div',{class:'err'},why(r)));const o=r.data,a=o.audit;
+ shell(h('h2',null,'Overview'),tip('Tip','Everything here is read live from the gateway. A broken audit chain or an anchor mismatch means history was changed.'),
+  h('div',{class:'cards'},sc('Accounts',o.users.active+' active of '+o.users.total),sc('Administrators',o.users.admins),sc('Runs',o.runs.total),sc('Runs in 24 hours',o.runs.last_24h),sc('Audit chain',a.ok?'Verified':'BROKEN',!a.ok),sc('Anchor',a.anchor.status.replace(/_/g,' '),a.anchor.status==='tamper_detected'),sc('Audit entries',a.entries)),
+  h('h3',null,'Runs by status'),h('p',null,Object.entries(o.runs.by_status).map(([k,v])=>k+': '+v).join(', ')||'none'),
+  h('h3',null,'Runs by origin'),h('p',null,Object.entries(o.runs.by_origin).map(([k,v])=>k+': '+v).join(', ')||'none'),
+  h('h3',null,'Models'),h('table',null,h('tbody',null,o.models.map(m=>h('tr',null,h('td',null,m.name),h('td',null,origin(m.origin)),h('td',null,m.configured?'configured':'key not set'))))))}
+async function viewUsers(){const r=await api('GET','/admin/users');if(r.status!==200)return shell(h('div',{class:'err'},why(r)));
+ const act=async(u,body,msg)=>{const x=await api('PATCH','/admin/users/'+encodeURIComponent(u),body);if(x.status===200){await viewUsers();flash('ok',msg)}else flash('err',why(x))};
+ const reset=async u=>{const pw=prompt('New password for '+u+' (at least 10 characters):');if(!pw)return;const x=await api('POST','/admin/users/'+encodeURIComponent(u)+'/reset-password',{new_password:pw});flash(x.status===200?'ok':'err',x.status===200?'Password reset. Their old sessions are signed out.':why(x))};
+ const nu=h('input',{maxlength:64,autocomplete:'off'}),np=h('input',{type:'password',maxlength:256,autocomplete:'new-password'}),nr=h('select',null,h('option',{value:'user'},'User'),h('option',{value:'admin'},'Admin'));
+ const add=async()=>{const x=await api('POST','/admin/users',{username:nu.value,password:np.value,role:nr.value});if(x.status===201){await viewUsers();flash('ok','Account created.')}else flash('err',why(x))};
+ shell(h('h2',null,'Users'),tip('Tip','Disabling an account, changing its role or resetting its password signs it out everywhere immediately.'),
+  h('div',{class:'scroll'},h('table',null,h('thead',null,h('tr',null,['Username','Role','Status','Last sign-in','Created by',''].map(x=>h('th',null,x)))),
+   h('tbody',null,r.data.map(u=>h('tr',null,h('td',null,u.username),h('td',null,u.role),h('td',null,u.active?'active':pill('DISABLED','k')),h('td',null,when(u.last_login)),h('td',null,u.created_by||'-'),
+    h('td',null,h('button',{class:'b s',onclick:()=>{if(confirm((u.active?'Disable ':'Enable ')+u.username+'?'))act(u.username,{active:!u.active},'Updated.')}},u.active?'Disable':'Enable'),' ',
+     h('button',{class:'b s',onclick:()=>{if(confirm('Make '+u.username+' '+(u.role==='admin'?'a normal user':'an admin')+'?'))act(u.username,{role:u.role==='admin'?'user':'admin'},'Role changed.')}},u.role==='admin'?'Make user':'Make admin'),' ',
+     h('button',{class:'b s',onclick:()=>reset(u.username)},'Reset password'))))))),
+  h('h3',null,'Create an account'),h('div',{class:'row'},h('div',null,h('label',null,'Username'),nu),h('div',null,h('label',null,'Password'),np),h('div',null,h('label',null,'Role'),nr),h('button',{class:'b p',onclick:add},'Create')))}
+
+/* ---------- account ---------- */
+function viewAccount(){const o=h('input',{type:'password',autocomplete:'current-password',maxlength:256}),n=h('input',{type:'password',autocomplete:'new-password',maxlength:256});
+ const go=async()=>{const r=await api('POST','/auth/change-password',{old_password:o.value,new_password:n.value});if(r.status===200){setSession(r.data);o.value=n.value='';flash('ok','Password changed. Other sessions were signed out.')}else flash('err',why(r))};
+ shell(h('h2',null,'Account'),h('p',null,'Signed in as ',h('b',null,S.user.username),' (',S.user.role,').'),h('h3',null,'Change password'),h('label',null,'Current password'),o,h('label',null,'New password'),n,h('p',null,h('button',{class:'b p',onclick:go},'Change password')),
+  h('p',{class:'mut'},'This tool screens a model with a small heuristic test suite. A report is not a security certification.'))}
+
+async function render(){
+ if(!S.token){$('#nav').replaceChildren();return viewLoggedOut()}
+ if(!S.user)await load();if(!S.token)return;
+ ({evaluate:viewEvaluate,runs:viewRuns,overview:viewOverview,users:viewUsers,account:viewAccount}[S.view]||viewEvaluate)()}
+render();
+</script>
+</body>
+</html>
