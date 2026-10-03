@@ -199,6 +199,52 @@ afterwards is detected. Write order is DB then audit; a crash between them shows
 Tests without Docker: `python3 tests/suites_test.py tests/eval_store_test.py tests/evaluator_test.py
 tests/eval_restart_test.py` (one at a time). UI: `bash tests/ui_eval_test.sh` (needs Node + jsdom, not in CI).
 
+## Web app (`/app`): accounts, reports, admin
+
+`/app` is the real front end (no `DEMO_UI` needed): sign in, run evaluations, read your results, print a report,
+download evidence. Administrators also get an overview, user management and every user's runs. `/ui` stays the
+demo console.
+
+**First run.** Open `/app` on a fresh gateway. It asks for a setup code, which proves you can read the server's
+configuration. Get it with
+`docker compose exec gateway python -c "import users,auth;print(users.bootstrap_code(auth.SECRET))"`, then create
+the first administrator. That route closes as soon as any account exists. Admins create further accounts under
+Users. Self-service signup exists but is off; it needs `ALLOW_SIGNUP=1` (and `USER_TOKEN_TTL` to change the
+1 hour session) added to the gateway's `environment:` in compose, which I did not edit.
+
+| Role | Can do |
+|---|---|
+| `user` | run evaluations on the models the operator configured; read, report on and download **only their own** runs |
+| `admin` | all of that, plus every user's runs, accounts (create, disable, role, reset password), the live audit/anchor overview |
+
+These are *account* roles stored in SQLite. They are separate from the tenant tokens (red, blue, admin = auditor,
+evaluator) the gateway already issues; an account principal appears in the audit log as `user:<name>`. Passwords
+are stored as salted scrypt hashes only (10-character minimum, must not contain the username). Failed logins are
+throttled per username and per address with identical responses for real and unknown accounts. Account tokens
+carry a role and a version that are re-checked on every request, so disabling an account, changing its role, or
+changing/resetting its password ends its sessions immediately. Someone else's run id answers 404, not 403.
+Users cannot bring their own model or endpoint: models are configured by the operator in `models.json`.
+
+## Evidence bundle and printable report
+
+For any finished run: `GET /evaluations/{id}/evidence` downloads a `bayora.evidence/1` JSON bundle (run, the exact
+suite definition, every result row, this run's audit entries with their hashes, the integrity state when it was
+made, a digest); `GET /evaluations/{id}/report` is a print-ready page (also reachable from `/app`: *Open printable
+report*, then print or save as PDF). The report lists the **potential downsides** the data shows (each flagged
+probe with what was expected, what happened, why it matters and what to consider; platform defects; cases that
+produced no verdict) and always ends with the evaluation's limitations. It is labelled MOCK or REAL and never
+claims a model is safe.
+
+Check a bundle offline with the standard library only: `python3 scripts/verify_evidence.py bundle.json`
+(`--json` for machines). It re-derives the digests, summary, every audit entry hash, the link from each result to
+its audit entry, the suite hash and the phase-gate order. It cannot re-derive audit-chain continuity or the
+anchor comparison (the excerpt is sparse); those are shown as INFO from what the gateway recorded at the time.
+The bundle digest catches accidental edits, not a determined forger who recomputes it: the gateway's live check
+of the full chain and the independent anchor stay the authority.
+
+Tests: `python3 tests/accounts_test.py tests/evidence_test.py tests/app_page_test.py` (one at a time, no Docker);
+browser-level: `bash tests/ui_app_test.sh` (needs Node + jsdom, not in CI).
+
 ## Demo UI (`/ui`) — demo only
 
 Set `DEMO_UI=1` for the gateway, then open `http://127.0.0.1:8080/ui`. The page calls
