@@ -58,6 +58,44 @@ def check_password(pw, username=""):
     return pw
 
 
+_CTRL = re.compile(r"[\x00-\x1f\x7f]")
+_EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,189}\.[^@\s.]{2,}$")
+_LIMITS = {"display_name": 40, "nickname": 24, "bio": 200, "email": 254}
+
+
+def check_profile(fields):
+    """fields: only the keys the caller sent. Returns cleaned values ('' -> None for text). Raises PolicyError."""
+    out = {}
+    for k, v in fields.items():
+        if k in ("show_username", "reduce_motion"):
+            if not isinstance(v, bool):
+                raise PolicyError("%s must be true or false" % k)
+            out[k] = 1 if v else 0
+            continue
+        if v is None:
+            out[k] = None
+            continue
+        if not isinstance(v, str):
+            raise PolicyError("%s must be text" % k)
+        v = v.strip()
+        if len(v) > _LIMITS[k]:
+            raise PolicyError("%s must be at most %d characters" % (k.replace("_", " "), _LIMITS[k]))
+        if _CTRL.search(v):
+            raise PolicyError("%s must not contain control characters" % k.replace("_", " "))
+        if k == "email" and v and not _EMAIL.match(v):
+            raise PolicyError("that does not look like an email address")
+        out[k] = v or None
+    return out
+
+
+def public_profile(p):
+    """The owner's own view. Never includes the hash, token version or any scope."""
+    d = {k: p[k] for k in ("username", "role", "created", "last_login", "display_name", "nickname", "email", "bio")}
+    d["show_username"] = bool(p["show_username"])
+    d["reduce_motion"] = bool(p["reduce_motion"])
+    return d
+
+
 def hash_password(pw):
     salt = os.urandom(16)
     h = hashlib.scrypt(pw.encode(), salt=salt, n=_N, r=_R, p=_P, dklen=32, maxmem=64 * 1024 * 1024)

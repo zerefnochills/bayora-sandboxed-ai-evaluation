@@ -10,6 +10,12 @@
      "max_response_bytes": 1048576, "max_concurrent": 2,
      "max_requests_per_minute": 0, "max_requests_per_run": 500},
 
+    {"id": "ollama-qwen25", "provider": "ollama", "name": "Qwen 2.5 3B (Ollama)", "model": "qwen2.5:3b",
+     "endpoint": "http://host.docker.internal:11434/v1", "enabled": false},
+
+    {"id": "ollama-gemma2", "provider": "ollama", "name": "Gemma 2 2B (Ollama)", "model": "gemma2:2b",
+     "endpoint": "http://host.docker.internal:11434/v1", "enabled": false},
+
     {"id": "local-openai", "provider": "openai", "name": "Local OpenAI-compatible server", "kind": "local",
      "model": "your-model-name", "endpoint": "http://host.docker.internal:8000/v1",
      "api_key_env": "LOCAL_LLM_API_KEY", "enabled": false},

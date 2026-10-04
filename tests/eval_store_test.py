@@ -39,7 +39,7 @@ c = sqlite3.connect(v1); c.executescript(store_mod._SCHEMA_V1); c.execute("PRAGM
 c.execute("INSERT INTO tests VALUES ('old1','concluded','p','r',1.0,'mock',3)")
 c.execute("INSERT INTO defenses (test_id, note, created) VALUES ('old1','note',2.0)"); c.commit(); c.close()
 s = store_mod.Store(v1)
-check("opening a v1 DB upgrades it to the current schema version", raw(v1, "PRAGMA user_version")[0][0] == store_mod.SCHEMA_VERSION == 4)
+check("opening a v1 DB upgrades it to the current schema version", raw(v1, "PRAGMA user_version")[0][0] == store_mod.SCHEMA_VERSION == 5)
 check("v1 rows survive untouched", s.get_test("old1")["prompt"] == "p" and raw(v1, "SELECT note FROM defenses")[0][0] == "note")
 check("new tables exist", {r[0] for r in raw(v1, "SELECT name FROM sqlite_master WHERE type='table'")} >= {"tests", "defenses", "eval_runs", "eval_results"})
 store_mod.Store(v1); store_mod.Store(v1)
@@ -57,7 +57,7 @@ check("upgrade over a conflicting table raises", raises(lambda: store_mod.Store(
 check("...and the DB is still v1", raw(bad, "PRAGMA user_version")[0][0] == 1)
 check("...with no eval_runs table left behind (all-or-nothing)", raw(bad, "SELECT name FROM sqlite_master WHERE name='eval_runs'") == [])
 check("...and the old data is intact", raw(bad, "SELECT test_id FROM tests") == [("keep",)])
-fut = TMP + "/future.db"; store_mod.Store(fut); raw(fut, "PRAGMA user_version = 5")
+fut = TMP + "/future.db"; store_mod.Store(fut); raw(fut, "PRAGMA user_version = 6")
 check("a newer schema version refuses to start (fail closed)", raises(lambda: store_mod.Store(fut), RuntimeError))
 
 print("== run lifecycle")

@@ -15,7 +15,7 @@ import json
 import sqlite3
 import time
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _SCHEMA_V1 = """
 CREATE TABLE tests (
@@ -110,6 +110,19 @@ CREATE TABLE users (
 """
 
 
+# v5: personal profile. Plain account information and preferences the owner may edit; nothing here grants
+# access. Email is stored as information only (nothing sends or verifies email).
+_SCHEMA_V5 = """
+ALTER TABLE users ADD COLUMN display_name TEXT;
+ALTER TABLE users ADD COLUMN nickname TEXT;
+ALTER TABLE users ADD COLUMN email TEXT;
+ALTER TABLE users ADD COLUMN bio TEXT;
+ALTER TABLE users ADD COLUMN show_username INTEGER NOT NULL DEFAULT 1 CHECK (show_username IN (0, 1));
+ALTER TABLE users ADD COLUMN reduce_motion INTEGER NOT NULL DEFAULT 0 CHECK (reduce_motion IN (0, 1));
+"""
+PROFILE_FIELDS = ("display_name", "nickname", "email", "bio", "show_username", "reduce_motion")
+
+
 class Store:
     def __init__(self, path):
         self.path = path
@@ -128,6 +141,9 @@ class Store:
             if version == 3:
                 c.executescript("BEGIN;" + _SCHEMA_V4 + "PRAGMA user_version = 4; COMMIT;")
                 version = 4
+            if version == 4:
+                c.executescript("BEGIN;" + _SCHEMA_V5 + "PRAGMA user_version = 5; COMMIT;")
+                version = 5
             if version != SCHEMA_VERSION:
                 # Fail closed: never run against a schema this code doesn't understand.
                 raise RuntimeError("store schema version %d, expected %d" % (version, SCHEMA_VERSION))
@@ -285,6 +301,21 @@ class Store:
         with self._conn() as c:
             return c.execute("UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE username = ?",
                              (password_hash, username)).rowcount == 1
+
+    def get_profile(self, username):
+        with self._conn() as c:
+            row = c.execute("SELECT username, role, created, last_login, %s FROM users WHERE username = ?" % ", ".join(PROFILE_FIELDS),
+                            (username,)).fetchone()
+        return dict(row) if row else None
+
+    def set_profile(self, username, fields):
+        """Only the PROFILE_FIELDS columns can ever be written here (role, active, hashes etc. are unreachable)."""
+        cols = [k for k in fields if k in PROFILE_FIELDS]
+        if not cols:
+            return False
+        with self._conn() as c:
+            return c.execute("UPDATE users SET %s WHERE username = ?" % ", ".join(k + " = ?" for k in cols),
+                             (*[fields[k] for k in cols], username)).rowcount == 1
 
     def touch_login(self, username):
         with self._conn() as c:

@@ -23,13 +23,13 @@ import logging
 import jwt
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
 
 from audit import AuditLog
 from auth import ALGO, SECRET, require, verify
 from llm_adapters import AdapterError, ID_RE, RateLimited, Registry
 from store import Store
-from evaluator import Runner, RunBusy, RunRefused
+from evaluator import CONTROLS, Runner, RunBusy, RunRefused
 import evidence
 import users
 from suites import SuiteRegistry
@@ -279,6 +279,25 @@ async def model_health(model_id: str, authorization: Optional[str] = Header(None
     return {"model": adapter.id, "provider": adapter.provider, "origin": adapter.origin, **h}
 
 
+@app.get("/evaluation-info")
+def evaluation_info(authorization: Optional[str] = Header(None)):
+    """What the evaluation tests, straight from the loaded suite definitions and the runner's control table."""
+    need(authorization, "eval:read")
+    suites = []
+    for s in SUITES.suites.values():
+        cats = {}
+        for a in s["attacks"]:
+            cats.setdefault(a["category"], []).append({"id": a["id"], "severity": a["severity"], "description": a["description"],
+                                                       "expected_property": a["expected_property"]})
+        suites.append({"id": s["id"], "version": s["version"], "name": s["name"], "categories": [
+            {"category": c, "probes": ps, "why_it_matters": evidence.RISK.get(c, evidence.GENERIC_RISK)[0],
+             "what_to_consider": evidence.RISK.get(c, evidence.GENERIC_RISK)[1]} for c, ps in sorted(cats.items())]})
+    ctl = {}
+    for cid, _stage, cat, sev, exp in CONTROLS:
+        ctl.setdefault(cat, []).append({"id": cid, "severity": sev, "expected_property": exp})
+    return {"suites": suites, "controls": [{"category": c, "controls": v} for c, v in ctl.items()]}
+
+
 @app.get("/suites")
 def list_suites(authorization: Optional[str] = Header(None)):
     need(authorization, "eval:read")
@@ -474,8 +493,35 @@ def auth_me(authorization: Optional[str] = Header(None)):
     p = need(authorization, "eval:read")
     if not p.sub.startswith(users.USER_PREFIX):
         raise HTTPException(403, "not an account token")
-    u = store.get_user(p.sub[len(users.USER_PREFIX):])
-    return {**users.public_user(u), "scope": sorted(p.scope)}
+    prof = users.public_profile(store.get_profile(p.sub[len(users.USER_PREFIX):]))
+    return {**prof, "active": True, "created_by": store.get_user(prof["username"])["created_by"], "scope": sorted(p.scope)}
+
+
+class ProfilePatch(BaseModel):
+    """Everything a user may change about themselves. extra=forbid: a request that also names role, active,
+    scopes or any other field is rejected outright rather than partly applied."""
+    model_config = ConfigDict(extra="forbid")
+    display_name: Optional[StrictStr] = None
+    nickname: Optional[StrictStr] = None
+    email: Optional[StrictStr] = None
+    bio: Optional[StrictStr] = None
+    show_username: Optional[StrictBool] = None
+    reduce_motion: Optional[StrictBool] = None
+
+
+@app.patch("/auth/profile")
+def auth_profile(body: ProfilePatch, authorization: Optional[str] = Header(None)):
+    p = need(authorization, "eval:read")
+    if not p.sub.startswith(users.USER_PREFIX):
+        raise HTTPException(403, "not an account token")
+    name = p.sub[len(users.USER_PREFIX):]          # the target is always the caller; there is no way to name another account
+    sent = body.model_dump(exclude_unset=True)
+    if not sent:
+        raise HTTPException(422, "nothing to update")
+    clean = _policy(users.check_profile, sent)
+    store.set_profile(name, clean)
+    audit.append("profile_updated", p.sub, {"fields": sorted(clean)})
+    return users.public_profile(store.get_profile(name))
 
 
 @app.post("/auth/change-password")
@@ -568,8 +614,10 @@ def _load_app_page():
     page = open(os.path.join(UI_DIR, "app.html"), encoding="utf-8").read()
     script = re.search(r"<script>(.*?)</script>", page, re.S).group(1)
     digest = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
-    csp = ("default-src 'none'; script-src 'sha256-%s'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:; "
-           "base-uri 'none'; form-action 'none'; frame-ancestors 'none'" % digest)
+    # The printable report opens as a blob: page, and a blob: page INHERITS this policy (on top of its own). So
+    # the report's one fixed print-button script must be allowed here too, by hash. No 'unsafe-inline'.
+    csp = ("default-src 'none'; script-src 'sha256-%s' '%s'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:; "
+           "base-uri 'none'; form-action 'none'; frame-ancestors 'none'" % (digest, evidence.SCRIPT_HASH))
     return page, csp
 
 
