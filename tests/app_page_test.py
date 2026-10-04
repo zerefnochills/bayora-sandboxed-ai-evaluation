@@ -11,6 +11,7 @@ os.environ.pop("DB_PATH", None)
 sys.path[:0] = [os.path.join(ROOT, "gateway")]
 import httpx  # noqa: E402
 gw = importlib.import_module("main")
+evidence = importlib.import_module("evidence")
 
 PASS = FAIL = 0
 def check(name, cond, extra=""):
@@ -25,7 +26,12 @@ async def main():
     js = scripts[0] if scripts else ""
     check("GET /app is public (it holds no data), 200 HTML", r.status_code == 200 and r.headers["content-type"].startswith("text/html"))
     check("headers: no-store, nosniff, DENY framing, no-referrer", r.headers["cache-control"] == "no-store" and r.headers["x-content-type-options"] == "nosniff" and r.headers["x-frame-options"] == "DENY" and r.headers["referrer-policy"] == "no-referrer")
-    check("exactly one script, and the CSP allows exactly that script's sha256", len(scripts) == 1 and csp.count("sha256-") == 1 and "script-src 'sha256-" + base64.b64encode(hashlib.sha256(js.encode()).digest()).decode() + "'" in csp)
+    app_hash = "sha256-" + base64.b64encode(hashlib.sha256(js.encode()).digest()).decode()
+    check("exactly one script; the CSP allows that script's hash and ONE other fixed hash (the report's print button), nothing else", len(scripts) == 1 and csp.count("sha256-") == 2 and ("script-src '%s' '%s'" % (app_hash, evidence.SCRIPT_HASH)) in csp, csp)
+    check("the report page opens as a blob: page, which INHERITS this policy; its one inline script must therefore hash to what /app allows", evidence.SCRIPT_HASH in csp and "sha256-" + base64.b64encode(hashlib.sha256(evidence.SCRIPT.encode()).digest()).decode() == evidence.SCRIPT_HASH)
+    check("no 'unsafe-inline' for scripts and no 'unsafe-eval' anywhere (the print fix did not weaken the policy)", "unsafe-eval" not in csp and not re.search(r"script-src[^;]*unsafe-inline", csp))
+    check("the app has the landing sections and the role-specific navigation labels", all(x in js for x in ("Guide me", "Try it", "My Runs", "All Runs", "Overview", "Users", "Account", "Sign out (")))
+    check("the account section is separate from admin tools and says email has no verification or recovery", "Administrator tools are separate" in js and "does not send email, verify addresses or offer email password recovery" in js)
     check("CSP: default-src 'none', no unsafe-eval, no 'unsafe-inline' for scripts, connect only to self, no framing, no base tag", "default-src 'none'" in csp and "unsafe-eval" not in csp and "script-src 'unsafe-inline'" not in csp and "connect-src 'self'" in csp and "frame-ancestors 'none'" in csp and "base-uri 'none'" in csp)
     check("no inline event-handler attributes in the HTML (they would be blocked, and are an XSS smell)", not re.search(r"<[a-z][^>]*\son[a-z]+\s*=", page.split("<script>")[0], re.I))
     check("script never uses innerHTML, outerHTML, insertAdjacentHTML, document.write, eval or new Function", not re.search(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function", js))

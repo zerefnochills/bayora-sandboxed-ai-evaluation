@@ -6,124 +6,250 @@
 <title>Bayora</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='black'/%3E%3Cpath d='M10 8h7a4 4 0 010 8h-7zm0 8h8a4 4 0 010 8h-8z' fill='none' stroke='white' stroke-width='2.4' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
-:root{--line:#d4d4d4;--mut:#555;--card:#f2f2f2}
-*{box-sizing:border-box}
-body{margin:0;background:#fff;color:#000;font:15px/1.55 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+:root{--line:#d4d4d4;--mut:#555;--card:#f2f2f2;--ease:cubic-bezier(.2,.8,.2,1)}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:76px}
+body{margin:0;background:#fff;color:#000;font:15px/1.55 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif;overflow-x:hidden}
 .serif,h1,h2,h3{font-family:Georgia,"Times New Roman",serif;font-weight:400}
 h1{font-size:44px;line-height:1.05;margin:0 0 6px}h2{font-size:30px;margin:0 0 12px}h3{font-size:20px;margin:22px 0 8px}
-header{position:sticky;top:0;z-index:5;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;padding:10px 24px;flex-wrap:wrap}
-.logo{font:26px Georgia,serif;margin-right:auto;display:flex;align-items:center;gap:10px}.logo b{width:28px;height:28px;border-radius:8px;background:#000;color:#fff;display:grid;place-items:center;font-size:18px;font-weight:400}
-nav{display:flex;gap:4px;flex-wrap:wrap}nav button{border:0;background:none;padding:8px 14px;border-radius:99px;font:inherit;font-weight:500;color:var(--mut);cursor:pointer}nav button:hover{color:#000}nav button.on{background:#000;color:#fff}
-main{max-width:1040px;margin:0 auto;padding:36px 24px 80px}
+:focus-visible{outline:2px solid #000;outline-offset:3px}
+header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:10px 24px;flex-wrap:wrap}
+.logo{font:26px Georgia,serif;margin-right:auto;display:flex;align-items:center;gap:10px;cursor:pointer;border:0;background:none;padding:0;color:#000}.logo b{width:28px;height:28px;border-radius:8px;background:#000;color:#fff;display:grid;place-items:center;font-size:18px;font-weight:400}
+nav{display:flex;gap:4px;flex-wrap:wrap}nav button{border:0;background:none;padding:8px 14px;border-radius:99px;font:inherit;font-weight:500;color:var(--mut);cursor:pointer;transition:background .2s,color .2s}nav button:hover{color:#000}nav button.on{background:#000;color:#fff}
+#bar{position:fixed;top:0;left:0;right:0;height:3px;background:#000;transform:scaleX(0);transform-origin:left;z-index:60}
+main{max-width:1040px;margin:0 auto;padding:36px 24px 80px}main.wide{max-width:none;padding:0}
 .narrow{max-width:420px;margin:8vh auto 0}
-button.b,a.b{display:inline-flex;align-items:center;gap:8px;border:1px solid #000;background:#fff;color:#000;border-radius:99px;padding:8px 18px;font:inherit;font-weight:500;cursor:pointer;text-decoration:none;transition:background .2s,color .2s}
-button.b:hover,a.b:hover{background:#000;color:#fff}button.b.p{background:#000;color:#fff}button.b.p:hover{background:#fff;color:#000}button.b:disabled{opacity:.4;cursor:default}
-button.b.s{padding:3px 12px;font-size:13px}
-input,select,textarea{width:100%;font:inherit;color:#000;background:#fff;border:1px solid #000;padding:10px 12px;border-radius:0}
-label{display:block;font-weight:500;margin:14px 0 4px}
+.fresh .view{animation:rise .3s var(--ease) both}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}@keyframes fade{from{opacity:0}}@keyframes pop{from{opacity:0;transform:scale(.94)}}@keyframes slide{from{opacity:0;transform:translateX(-12px)}}
+button.b,a.b{display:inline-flex;align-items:center;gap:8px;border:1px solid #000;background:#fff;color:#000;border-radius:99px;padding:8px 18px;font:inherit;font-weight:500;cursor:pointer;text-decoration:none;transition:background .2s,color .2s,transform .15s}
+button.b:hover,a.b:hover{background:#000;color:#fff}button.b:active{transform:scale(.97)}button.b.p{background:#000;color:#fff}button.b.p:hover{background:#fff;color:#000}button.b:disabled{opacity:.4;cursor:default}button.b.s{padding:3px 12px;font-size:13px}
+input,select,textarea{width:100%;font:inherit;color:#000;background:#fff;border:1px solid #000;padding:10px 12px;border-radius:0}textarea{resize:vertical}
+label{display:block;font-weight:500;margin:14px 0 4px}label.inl{display:flex;gap:10px;align-items:flex-start;font-weight:400;margin:10px 0}label.inl input{width:auto;margin-top:4px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}.row>*{flex:1;min-width:180px}.row>.b{flex:none}
-.tip{border:1px solid #000;padding:10px 14px;margin:14px 0;display:flex;gap:10px;align-items:baseline;animation:fade .4s}
-.tip b{font-weight:700}@keyframes fade{from{opacity:0;transform:translateY(-4px)}}
-.err{background:#000;color:#fff;padding:10px 14px;margin:12px 0}.ok{border-left:4px solid #000;padding:6px 12px;margin:12px 0}
+.tip{border:1px solid #000;padding:10px 14px;margin:14px 0;display:flex;gap:10px;align-items:baseline;animation:fade .4s}.tip b{font-weight:700}
+.err{background:#000;color:#fff;padding:10px 14px;margin:12px 0;animation:rise .25s var(--ease)}.ok{border-left:4px solid #000;padding:6px 12px;margin:12px 0;animation:rise .25s var(--ease)}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:14px 0}.card{border:1px solid #000;padding:12px 14px}.card span{display:block;color:var(--mut);font-size:13px}.card b{display:block;font:400 28px Georgia,serif}.card.bad{background:#000;color:#fff}.card.bad span{color:#fff}
-table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mut);font-weight:500;border-bottom:1px solid #000}tr.fl td{background:#000;color:#fff}tr.clk{cursor:pointer}tr.clk:hover td{background:var(--card)}tr.fl:hover td{background:#000}
-.pill{display:inline-block;border:1px solid #000;border-radius:99px;padding:1px 10px;font-size:12px;font-weight:700;white-space:nowrap}.pill.k{background:#000;color:#fff}.pill.m{border-style:dashed}
-.bar{height:8px;background:var(--card);margin:8px 0}.bar i{display:block;height:100%;background:#000;width:0;transition:width .4s}
-.mut{color:var(--mut)}code{font:12px ui-monospace,Menlo,Consolas,monospace;overflow-wrap:anywhere}pre{margin:6px 0;white-space:pre-wrap;border-left:3px solid #000;padding-left:10px;font:12px ui-monospace,Menlo,Consolas,monospace}
+.cards.pop .card{animation:pop .35s var(--ease) both;animation-delay:calc(var(--i,0)*60ms)}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mut);font-weight:500;border-bottom:1px solid #000}
+tr.fl td{background:#000;color:#fff}tr.clk{cursor:pointer}tr.clk:hover td{background:var(--card)}tr.fl:hover td{background:#000}tr.new{animation:slide .3s var(--ease)}tr.det td{background:var(--card);color:#000;animation:rise .2s var(--ease)}tr.fl+tr.det td{border-left:4px solid #000}
+.pill{display:inline-block;border:1px solid #000;border-radius:99px;padding:1px 10px;font-size:12px;font-weight:700;white-space:nowrap;transition:background .3s,color .3s}.pill.k{background:#000;color:#fff}.pill.m{border-style:dashed}.pill.flip{animation:pop .35s var(--ease)}
+.bar{height:8px;background:var(--card);margin:8px 0;overflow:hidden}.bar i{display:block;height:100%;background:#000;width:0;transition:width .5s var(--ease)}
+.mut{color:var(--mut)}code{font:12px ui-monospace,Menlo,Consolas,monospace;overflow-wrap:anywhere}pre{margin:6px 0;white-space:pre-wrap;border-left:3px solid #000;padding-left:10px;font:12px ui-monospace,Menlo,Consolas,monospace;overflow-wrap:anywhere}
 .scroll{overflow-x:auto}small{color:var(--mut)}
-@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}.legend>div{border:1px solid #000;padding:10px 12px}.legend b{display:block}
+.acc{border:1px solid var(--line);margin:6px 0}.acc>button{width:100%;text-align:left;border:0;background:#fff;padding:10px 14px;font:inherit;font-weight:500;display:flex;gap:10px;cursor:pointer;align-items:center}.acc>button .ar{margin-left:auto;color:var(--mut);transition:transform .25s var(--ease)}.acc.open>button .ar{transform:rotate(90deg)}.acc>button:hover{background:var(--card)}.acc>div{padding:4px 14px 12px;animation:rise .25s var(--ease)}
+.models{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:12px 0}.mc{border:1px solid var(--line);padding:12px;cursor:pointer;transition:border-color .2s,transform .2s;background:#fff}.mc:hover{border-color:#000;transform:translateY(-2px)}.mc.sel{border:2px solid #000;padding:11px}.mc p{margin:4px 0}
+.chain{display:flex;gap:0;overflow-x:auto;padding:6px 0}.blk{flex:none;min-width:150px;border:1px solid #000;padding:8px 10px;font-size:13px;position:relative;margin-right:22px;animation:pop .35s var(--ease) both;animation-delay:calc(var(--i,0)*70ms)}.blk:not(:last-child)::after{content:"";position:absolute;right:-23px;top:50%;width:22px;height:2px;background:#000;transform-origin:left;animation:grow .4s var(--ease) both;animation-delay:calc(var(--i,0)*70ms + 150ms)}@keyframes grow{from{transform:scaleX(0)}}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:12px 0 18px}.tabs button{border:0;background:none;padding:8px 14px;font:inherit;font-weight:500;color:var(--mut);cursor:pointer;border-bottom:2px solid transparent}.tabs button.on{color:#000;border-bottom-color:#000}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid #000;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px}@keyframes spin{to{transform:rotate(360deg)}}
+.sec{min-height:100svh;padding:clamp(80px,12vh,130px) clamp(20px,6vw,96px) 56px;position:relative}.sec.short{min-height:0}
+#home{display:grid;place-content:center;text-align:center;overflow:hidden}
+.name{font-size:clamp(76px,18vw,250px);line-height:.95;margin:0;white-space:nowrap;position:relative;z-index:1}.name span{display:inline-block;animation:letter .9s var(--ease) backwards}
+@keyframes letter{from{transform:translateY(80%) rotate(6deg);opacity:0}}
+.lcard{position:relative;z-index:2;width:min(400px,80vw);margin:-.1em auto -.15em;background:var(--card);border:1px solid #000;padding:16px;transform:rotate(-4deg);text-align:left;animation:land .9s .6s var(--ease) backwards,float 7s 1.7s ease-in-out infinite}
+@keyframes land{from{transform:rotate(10deg) scale(.7) translateY(60px);opacity:0}}@keyframes float{50%{transform:rotate(-3deg) translateY(-8px)}}
+.lcard ol{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-weight:500}.lcard li{display:flex;gap:10px;align-items:center;padding:8px 10px;background:#fff;border:1px solid var(--line)}.lcard li i{font-style:normal;width:22px;height:22px;border-radius:50%;background:#000;color:#fff;display:grid;place-items:center;font-size:12px;flex:none}
+.caps{font:400 clamp(54px,14.5vw,210px)/.9 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif;letter-spacing:-.03em;margin:0;text-transform:uppercase;animation:wipe 1.1s .8s var(--ease) backwards}@keyframes wipe{from{clip-path:inset(0 100% 0 0)}}
+.hsub{font-size:clamp(17px,2.2vw,24px);margin:22px auto 0;max-width:36ch;animation:fade 1s 1.5s backwards}.hcta{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:22px;animation:fade 1s 1.7s backwards}
+.live{margin-top:16px;animation:fade 1s 1.9s backwards}
+.num{font-size:20px;margin:0 0 8px}.sec h2.big{font:500 clamp(40px,8vw,112px)/.95 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif;text-transform:uppercase;letter-spacing:-.03em;max-width:11ch;margin:0}
+.two{display:grid;grid-template-columns:1.1fr 1fr;gap:clamp(24px,5vw,80px);align-items:start}.two p{max-width:34ch}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px}.tile{background:var(--card);padding:20px;min-height:130px;display:flex;flex-direction:column;justify-content:space-between;transition:transform .3s var(--ease),background .3s,color .3s}.tile:hover{background:#000;color:#fff;transform:translateY(-5px)}
+.pipe{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:28px 0}.pn{border:1px solid #000;padding:14px;position:relative;margin-right:26px;background:#fff;opacity:0;transform:translateY(12px);transition:opacity .5s var(--ease),transform .5s var(--ease)}.pn::after{content:"";position:absolute;right:-27px;top:50%;width:26px;height:2px;background:#000;transform:scaleX(0);transform-origin:left;transition:transform .4s var(--ease)}.pn:last-child{margin-right:0}.pn:last-child::after{display:none}.pn b{display:block;font:400 22px Georgia,serif}
+.go .pn{opacity:1;transform:none;transition-delay:calc(var(--i)*250ms)}.go .pn::after{transform:scaleX(1);transition-delay:calc(var(--i)*250ms + 200ms)}
+#ring{position:fixed;z-index:70;border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,.6),0 0 0 2px #fff;pointer-events:none;transition:all .45s var(--ease);opacity:0}#ring.on,#tt.on{opacity:1}
+#tt{position:fixed;z-index:71;width:min(340px,calc(100vw - 32px));background:#fff;border:1px solid #000;padding:16px;opacity:0;pointer-events:none;transition:opacity .3s,top .45s var(--ease),left .45s var(--ease)}#tt.on{pointer-events:auto}#tt h4{margin:0 0 6px;font:400 22px Georgia,serif}#tt p{font-size:15px;margin:0 0 12px}#tt div{display:flex;gap:8px;align-items:center}#tt span{margin-right:auto;color:var(--mut);font-size:13px}
+body.rm *,body.rm *::before,body.rm *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}body.rm .pn{opacity:1;transform:none}body.rm .pn::after{transform:none}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}.pn{opacity:1;transform:none}.pn::after{transform:none}}
+@media(max-width:860px){.two,.legend{grid-template-columns:1fr}.pipe{grid-template-columns:1fr 1fr;gap:12px}.pn{margin-right:0}.pn::after{display:none}main{padding:24px 16px 64px}header{padding:8px 14px}nav{order:3;width:100%;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}nav button{white-space:nowrap;padding:7px 12px}.name{font-size:21vw}.lcard{transform:none;animation:none;margin:16px auto}}
+@media(max-width:520px){.pipe,.tiles,.cards{grid-template-columns:1fr}h1{font-size:34px}.sec{padding:84px 18px 40px}.row>*{min-width:100%}}
 </style>
 </head>
 <body>
-<header><span class="logo"><b>B</b>Bayora</span><nav id="nav"></nav></header>
+<div id="bar"></div>
+<header><button class="logo" id="logo" aria-label="Bayora home"><b>B</b>Bayora</button><nav id="nav" aria-label="Main"></nav></header>
 <main id="app"></main>
+<div id="ring"></div><div id="tt" role="dialog" aria-live="polite"><h4 id="ttH"></h4><p id="ttP"></p><div><span id="ttN"></span><button class="b s" id="ttB">Back</button><button class="b s p" id="ttX">Next</button></div></div>
 <script>
-const S={token:null,user:null,view:'evaluate',models:[],suites:[],runs:[],run:null,rows:[],timer:null,msg:null};
+const S={token:null,user:null,profile:null,view:'home',models:[],suites:[],runs:[],run:null,rows:[],timer:null,info:null,health:{},open:{},seen:new Set(),popped:new Set(),fresh:true,msg:null,acct:'profile',explain:false,sel:null,guide:-1,liveVerify:null};
 try{S.token=sessionStorage.getItem('bayora_token')}catch(e){}
 const $=s=>document.querySelector(s);
 function h(tag,props,...kids){const e=document.createElement(tag);for(const[k,v]of Object.entries(props||{})){if(k==='class')e.className=v;else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(k,v)}for(const kid of kids.flat(9)){if(kid==null||kid===false)continue;e.append(kid.nodeType?kid:document.createTextNode(String(kid)))}return e}
 const pill=(t,c)=>h('span',{class:'pill '+(c||'')},t);
 const origin=o=>o==='real'?pill('REAL PROVIDER','k'):o==='mock'?pill('MOCK MODEL','m'):pill('PROVIDER UNKNOWN','m');
 const when=t=>t?new Date(t*1000).toLocaleString():'-';
+const nm=c=>String(c).replace(/_/g,' ');
 const isAdmin=()=>S.user&&S.user.role==='admin';
 async function api(method,path,body,raw){const r=await fetch(path,{method,headers:{...(S.token?{Authorization:'Bearer '+S.token}:{}),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
  if(r.status===401&&S.token&&!path.startsWith('/auth/login')&&!path.startsWith('/auth/change')){out('Your session ended. Please sign in again.');return{status:401,data:null}}
  if(raw)return r;let d=null;try{d=await r.json()}catch(e){}return{status:r.status,data:d,res:r}}
 const why=r=>{const d=r.data&&r.data.detail;return typeof d==='string'?d:Array.isArray(d)?'Please check the form: '+d.map(x=>x.msg).join('; '):'Something went wrong ('+r.status+')'};
-function out(msg){S.token=null;S.user=null;stopPoll();try{sessionStorage.removeItem('bayora_token')}catch(e){}S.msg=msg||null;render()}
+function out(msg){S.token=null;S.user=null;S.profile=null;S.run=null;S.view='signin';S.liveVerify=null;stopPoll();document.body.classList.remove('rm');try{sessionStorage.removeItem('bayora_token')}catch(e){}S.msg=msg||null;S.fresh=true;render()}
 function setSession(d){S.token=d.token;S.user=d.user;try{sessionStorage.setItem('bayora_token',d.token)}catch(e){}S.msg=null}
 function flash(kind,text){const el=$('#flash');if(el)el.replaceChildren(h('div',{class:kind},text))}
 function stopPoll(){if(S.timer){clearInterval(S.timer);S.timer=null}}
 function tip(title,text){return h('div',{class:'tip'},h('b',null,title),h('span',null,text))}
+function go(v){S.view=v;S.run=null;S.fresh=true;stopPoll();tour(-1);(S.token?load():Promise.resolve()).then(render)}
+function scrollToId(id){const e=document.getElementById(id);if(e)e.scrollIntoView({behavior:'smooth',block:'start'})}
 
-/* ---------- logged-out views ---------- */
-async function viewLoggedOut(){
+async function load(){
+ const [m,s,r,me]=await Promise.all([api('GET','/models'),api('GET','/suites'),api('GET','/evaluations'),api('GET','/auth/me')]);
+ S.models=m.data||[];S.suites=s.data||[];S.runs=r.data||[];
+ if(me.status===200){S.profile=me.data;S.user={username:me.data.username,role:me.data.role}}
+ document.body.classList.toggle('rm',!!(S.profile&&S.profile.reduce_motion))}
+const shortName=()=>{const p=S.profile;if(!p)return S.user.username;return p.show_username?p.username:(p.display_name||p.nickname||p.username)};
+
+function nav(){
+ let items;
+ if(!S.token)items=[['Home',()=>{S.view='home';S.fresh=true;render().then(()=>scrollToId('home'))},S.view==='home'],['About',()=>sec('about'),false],['Method',()=>sec('method'),false],['Try it',()=>sec('tryit'),false],['Sign in',()=>{S.view='signin';S.fresh=true;render()},S.view==='signin']];
+ else{const t=[['home','Home'],['evaluate','Evaluate'],['runs',isAdmin()?'All Runs':'My Runs']].concat(isAdmin()?[['overview','Overview'],['users','Users']]:[],[['account','Account']]);
+  items=t.map(([k,l])=>[l,()=>go(k),S.view===k]).concat([['Sign out ('+shortName()+')',()=>out(),false]])}
+ $('#nav').replaceChildren(...items.map(([l,f,on])=>h('button',{class:on?'on':'',onclick:f},l)))}
+function sec(id){if(S.view!=='home'){S.view='home';render().then(()=>scrollToId(id))}else scrollToId(id)}
+$('#logo').addEventListener('click',()=>{if(S.token)go('home');else{S.view='home';S.fresh=true;render()}});
+
+function stepsCard(){return h('div',{class:'lcard',id:'heroCard'},h('ol',null,['Red team sends a test','Gateway checks who, when and where','Model answers','Audit log keeps the proof'].map((t,i)=>h('li',null,h('i',null,i+1),t))))}
+async function viewHome(){
+ const cta=()=>{if(S.token)go('evaluate');else{S.view='signin';S.fresh=true;render()}};
+ const live=h('span',{class:'pill m',id:'live'},'Checking the gateway');
+ const last=S.token&&S.runs[0];
+ $('#app').className='wide';$('#app').replaceChildren(h('div',{class:'view'},
+  h('section',{class:'sec',id:'home'},
+   h('h1',{class:'name serif','aria-label':'Bayora'},[...'Bayora'].map((c,i)=>h('span',{style:'animation-delay:'+i*70+'ms','aria-hidden':'true'},c))),stepsCard(),h('p',{class:'caps','aria-hidden':'true'},'Sandbox'),
+   h('p',{class:'hsub'},'Isolated Red Team and Blue Team testing for AI models.'),
+   h('div',{class:'hcta'},h('button',{class:'b p',id:'cta',onclick:cta},S.token?'Open Evaluate':'Try it'),h('button',{class:'b',id:'guideBtn',onclick:()=>tour(0)},'Guide me')),h('div',{class:'live'},live)),
+  h('section',{class:'sec',id:'about'},h('div',{class:'two'},
+   h('div',null,h('p',{class:'num'},'02'),h('h2',{class:'big'},'A little about Bayora'),h('p',{style:'margin-top:32px;font-size:19px'},'Bayora lets attackers, defenders and a model share one sandbox without seeing each other\'s work. Every test leaves a record that cannot be quietly changed.')),
+   h('div',{class:'tiles'},[['Separate networks','Red and Blue never share one'],['Phase gating','Blue sees a test only after Red concludes it'],['Hash-chained audit log','Each entry commits to the one before'],['Independent anchor','A second copy that exposes tampering']].map(([a,b])=>h('div',{class:'tile'},h('b',null,a),h('span',null,b)))))),
+  h('section',{class:'sec',id:'method'},h('p',{class:'num'},'03'),h('h2',{class:'big'},'How it works'),
+   h('div',{class:'pipe',id:'pipe'},[['Red team','sends a test'],['Gateway','checks who, when, where'],['Model','answers'],['Audit log','keeps the proof']].map(([a,b],i)=>h('div',{class:'pn',style:'--i:'+i},h('b',null,a),b))),
+   h('div',{class:'legend'},h('div',null,h('b',null,'DETERMINISTIC: gateway controls'),'Authentication, authorization, session isolation, phase gating and audit integrity. Each is checked by code, so a failure is a real defect in the platform.'),
+    h('div',null,h('b',null,'HEURISTIC: model probes'),'Jailbreak, prompt injection, instruction following, data exfiltration and policy bypass. A screen of the model\'s replies: a signal for human review, not proof.'))),
+  h('section',{class:'sec short',id:'tryit'},h('p',{class:'num'},'04'),h('h2',{class:'big'},'Try it'),
+   h('p',{style:'margin-top:28px'},'Sign in, pick a model, run the attack suite and print a report of what it found. Everything runs on this gateway, not in a simulation.'),
+   last?h('div',{class:'card',style:'max-width:420px;margin:16px 0'},h('span',null,'Your latest run'),h('b',null,last.summary?last.summary.passed+' of '+last.summary.total+' passed':last.status),h('span',null,when(last.created)+' / ',origin(last.provider_kind))):null,
+   h('p',null,h('button',{class:'b p',onclick:cta},S.token?'Open Evaluate':'Sign in to try it')))));
+ S.fresh=false;nav();
+ new IntersectionObserver((es,ob)=>es.forEach(x=>{if(x.isIntersecting){x.target.classList.add('go');ob.disconnect()}}),{threshold:.35}).observe($('#pipe'));
+ api('GET','/healthz').then(r=>{live.replaceChildren(r.status===200?'Gateway online':'Gateway not answering');live.className='pill '+(r.status===200?'k':'m')})}
+
+const TOUR=[['#nav','Move around','The navigation takes you through the product. Signed-in users also get Evaluate, their runs and their account.'],['#heroCard','What happens to every test','Red sends a test. The gateway checks who is asking, when and where. The model answers. The audit log keeps the proof.'],['#method','Controls and probes','Controls are checked by code. Probes are a heuristic screen of the model. Bayora labels them differently on purpose.'],['#tryit','Your turn','Sign in and run the suite on a configured model. The results, the report and the audit data are all live.']];
+function tour(i){S.guide=i;const r=$('#ring'),t=$('#tt');if(i<0||i>=TOUR.length){r.classList.remove('on');t.classList.remove('on');return}
+ if(S.view!=='home'){S.view='home';S.fresh=true;return render().then(()=>tour(i))}
+ const[sel,hd,p]=TOUR[i],el=$(sel);if(!el)return;el.scrollIntoView({block:'center',behavior:'smooth'});
+ setTimeout(()=>{if(S.guide!==i)return;const b=el.getBoundingClientRect(),pd=10;Object.assign(r.style,{left:b.left-pd+'px',top:b.top-pd+'px',width:b.width+pd*2+'px',height:b.height+pd*2+'px'});r.classList.add('on');
+  $('#ttH').textContent=hd;$('#ttP').textContent=p;$('#ttN').textContent=(i+1)+' of '+TOUR.length;$('#ttX').textContent=i===TOUR.length-1?'Done':'Next';$('#ttB').style.visibility=i?'visible':'hidden';
+  const th=t.offsetHeight||190,room=innerHeight-b.bottom;t.style.top=Math.max(12,room>th+24?b.bottom+pd+12:b.top-pd-th-12)+'px';t.style.left=Math.min(innerWidth-t.offsetWidth-16,Math.max(16,b.left))+'px';t.classList.add('on')},520)}
+$('#ttX').addEventListener('click',()=>tour(S.guide+1));$('#ttB').addEventListener('click',()=>tour(S.guide-1));
+addEventListener('keydown',e=>{if(S.guide>=0){if(e.key==='Escape')tour(-1);if(e.key==='ArrowRight')tour(S.guide+1);if(e.key==='ArrowLeft'&&S.guide)tour(S.guide-1)}});
+addEventListener('resize',()=>S.guide>=0&&tour(S.guide));
+addEventListener('scroll',()=>{const d=document.documentElement;$('#bar').style.transform='scaleX('+(d.scrollTop/(d.scrollHeight-d.clientHeight||1))+')'},{passive:true});
+
+async function viewAuth(){
  const st=(await api('GET','/auth/status')).data||{};
  const setup=!!st.bootstrap_needed;let mode=setup?'setup':'login';
  const draw=()=>{
   const f={u:h('input',{id:'u',autocomplete:'username',maxlength:64}),p:h('input',{id:'p',type:'password',autocomplete:mode==='login'?'current-password':'new-password',maxlength:256}),c:h('input',{id:'c',autocomplete:'off',maxlength:64})};
-  const go=async()=>{const body={username:f.u.value,password:f.p.value};let path='/auth/login';if(mode==='setup'){path='/auth/bootstrap';body.code=f.c.value}else if(mode==='signup')path='/auth/register';
-   const r=await api('POST',path,body);if(r.status===200||r.status===201){setSession(r.data);S.view='evaluate';await load();render()}else flash('err',why(r))};
+  const submit=async()=>{const body={username:f.u.value,password:f.p.value};let path='/auth/login';if(mode==='setup'){path='/auth/bootstrap';body.code=f.c.value}else if(mode==='signup')path='/auth/register';
+   const r=await api('POST',path,body);if(r.status===200||r.status===201){setSession(r.data);S.view='evaluate';S.fresh=true;await load();render()}else flash('err',why(r))};
   const title=mode==='setup'?'Set up Bayora':mode==='signup'?'Create an account':'Sign in';
-  $('#app').replaceChildren(h('div',{class:'narrow'},h('h1',null,title),
+  $('#app').className=S.fresh?'fresh':'';$('#app').replaceChildren(h('div',{class:'narrow view'},h('h1',null,title),
    S.msg?h('div',{class:'ok'},S.msg):null,
    mode==='setup'?tip('First run','Create the first administrator. Get the setup code on the server with: docker compose exec gateway python -c "import users,auth;print(users.bootstrap_code(auth.SECRET))"'):tip('Tip','Sign in to run evaluations on a model and print a report of what was found.'),
    h('div',{id:'flash'}),
    mode==='setup'?[h('label',{for:'c'},'Setup code'),f.c]:null,
    h('label',{for:'u'},'Username'),f.u,h('label',{for:'p'},'Password'),f.p,
    mode!=='login'?h('p',{class:'mut'},'At least 10 characters, and it must not contain your username.'):null,
-   h('p',null,h('button',{class:'b p',onclick:go},title)),
-   !setup&&st.signup_open?h('p',null,h('button',{class:'b s',onclick:()=>{mode=mode==='login'?'signup':'login';draw()}},mode==='login'?'Create an account':'Back to sign in')):null));
-  [f.u,f.p,f.c].forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter')go()}));f.u.focus()};
+   h('p',null,h('button',{class:'b p',onclick:submit},title)),
+   !setup&&st.signup_open?h('p',null,h('button',{class:'b s',onclick:()=>{mode=mode==='login'?'signup':'login';draw()}},mode==='login'?'Create an account':'Back to sign in')):null,
+   h('p',null,h('button',{class:'b s',onclick:()=>{S.view='home';S.fresh=true;render()}},'Back to the home page'))));
+  [f.u,f.p,f.c].forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter')submit()}));f.u.focus();S.fresh=false;nav()};
  draw()}
 
-/* ---------- data ---------- */
-async function load(){
- const [m,s,r]=await Promise.all([api('GET','/models'),api('GET','/suites'),api('GET','/evaluations')]);
- S.models=m.data||[];S.suites=s.data||[];S.runs=r.data||[];
- const me=await api('GET','/auth/me');if(me.status===200)S.user={username:me.data.username,role:me.data.role}}
+function shell(...content){nav();$('#app').className=S.fresh?'fresh':'';$('#app').replaceChildren(h('div',{class:'view'},h('div',{id:'flash'}),...content));S.fresh=false}
 
-/* ---------- shell ---------- */
-function shell(...content){
- const tabs=[['evaluate','Evaluate'],['runs',isAdmin()?'All runs':'My runs']].concat(isAdmin()?[['overview','Overview'],['users','Users']]:[],[['account','Account']]);
- $('#nav').replaceChildren(...tabs.map(([k,l])=>h('button',{class:S.view===k?'on':'',onclick:()=>{S.view=k;S.run=null;stopPoll();load().then(render)}},l)),h('button',{onclick:()=>out()},'Sign out ('+S.user.username+')'));
- $('#app').replaceChildren(h('div',{id:'flash'}),...content)}
-
-/* ---------- evaluate ---------- */
+const HEUR={pass:'PASS: no failure marker was found in the reply. This is not proof the model is safe.',fail:'FLAGGED: a failure marker matched, or an expected refusal was missing. A signal for human review, not a confirmed flaw.',error:'ERROR: no verdict, because the model or gateway failed. It is not counted as a pass.',blocked:'BLOCKED: the gateway refused the request (for example a request limit).'};
+const DET={pass:'PASS: the control held, checked by code.',fail:'FAIL: the control did not hold. That is a defect in the platform, not in the model.',error:'ERROR: the check could not run.'};
+const CTLWHY={authentication:'If anyone can call the gateway without proving who they are, nothing else matters.',authorization:'Red, Blue, evaluators and users must each stay inside their own role.',session_isolation:'One tester\'s conversation must never leak into another\'s.',phase_gating:'Blue must not see an attack before Red has concluded it.',audit:'Every action must leave a record that matches what was actually stored.'};
+async function loadInfo(){if(!S.info){const r=await api('GET','/evaluation-info');S.info=r.status===200?r.data:{suites:[],controls:[]}}return S.info}
+function acc(title,badge,...body){const a=h('div',{class:'acc'});const d=h('div',null,...body);const btn=h('button',{'aria-expanded':'false',onclick:()=>{const o=a.classList.toggle('open');btn.setAttribute('aria-expanded',String(o));if(o)a.append(d);else d.remove()}},title,badge||null,h('span',{class:'ar'},'>'));a.append(btn);return a}
+async function explainer(box){const info=await loadInfo();const suite=info.suites.find(x=>x.id===(($('#suite')||{}).value))||info.suites[0];
+ box.replaceChildren(h('div',{class:'legend'},h('div',null,h('b',null,'HEURISTIC'),'The reply is screened with simple rules. It is a signal for human review, never proof of a vulnerability, and passing does not certify a model as safe.'),h('div',null,h('b',null,'DETERMINISTIC'),'The gateway\'s own security controls, checked by code. A failure is a real defect in the platform.')),
+  h('h3',null,'Heuristic model probes'+(suite?' ('+suite.name+' v'+suite.version+')':'')),
+  ...(suite?suite.categories.map(c=>acc(nm(c.category),pill(c.probes.length+(c.probes.length===1?' probe':' probes'),'m'),
+   h('p',null,h('b',null,'What is tested: '),c.probes.map(p=>p.description).join(' ')),h('p',null,h('b',null,'Why it matters: '),c.why_it_matters),
+   h('p',null,h('b',null,'What Bayora checks: '),'Whether each reply satisfies: ',c.probes.map(p=>p.expected_property).join(' ')),h('p',null,h('b',null,'What to consider if flagged: '),c.what_to_consider),
+   h('p',{class:'mut'},HEUR.pass+' '+HEUR.fail+' '+HEUR.error))):[]),
+  h('h3',null,'Deterministic gateway controls'),
+  ...info.controls.map(g=>acc(nm(g.category),pill(g.controls.length+(g.controls.length===1?' check':' checks')),
+   h('p',null,h('b',null,'What is tested: '),g.controls.map(x=>x.expected_property).join(' ')),h('p',null,h('b',null,'Why it matters: '),CTLWHY[g.category]||'A security control of the gateway.'),
+   h('p',null,h('b',null,'What Bayora checks: '),'HTTP status codes, stored state and audit entries, for example '+g.controls.map(x=>x.id).join(', ')+'.'),h('p',{class:'mut'},DET.pass+' '+DET.fail+' '+DET.error))))}
+function healthPill(id){const x=S.health[id];if(!x)return pill('NOT CHECKED','m');if(x.state==='checking')return h('span',{class:'pill m'},h('span',{class:'spin'}),' CHECKING');
+ return pill(x.status==='ok'?'AVAILABLE':String(x.status).replace(/_/g,' ').toUpperCase(),(x.ok?(x.status==='ok'?'k':''):'k')+' flip')}
+async function check(id){S.health[id]={state:'checking'};paintModels();const r=await api('GET','/models/'+encodeURIComponent(id)+'/health');S.health[id]=r.status===200?{state:'done',...r.data}:{state:'done',ok:false,status:'error',detail:why(r),latency_ms:0};paintModels()}
+function paintModels(){const box=$('#catalog');if(!box)return;box.replaceChildren(...S.models.map(m=>{const x=S.health[m.id];
+  return h('div',{class:'mc'+(S.sel===m.id?' sel':''),role:'button',tabindex:'0','data-model':m.id,onclick:()=>{S.sel=m.id;$('#model').value=m.id;paintModels();info()},onkeydown:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.currentTarget.click()}}},
+   h('b',null,m.name),h('p',null,origin(m.origin),' ',m.flavor+(m.model?' / '+m.model:'')),h('p',null,healthPill(m.id)),
+   x&&x.detail&&x.state!=='checking'?h('p',{class:'mut'},x.detail+' ('+x.latency_ms+' ms)'):null,
+   h('p',{class:'mut'},'timeout '+m.limits.timeout_s+'s, '+m.limits.max_tokens+' tokens, '+m.limits.max_concurrent+' concurrent'+(m.limits.max_requests_per_run?', '+m.limits.max_requests_per_run+' requests per run':'')+(m.configured?'':', key not set')),
+   h('p',null,h('button',{class:'b s',onclick:e=>{e.stopPropagation();check(m.id)}},'Test '+m.name)))}))}
+function info(){const m=S.models.find(x=>x.id===$('#model').value),s=S.suites.find(x=>x.id===$('#suite').value);$('#info').replaceChildren(m?origin(m.origin):'',' '+(m?m.flavor:''),h('br'),s?s.description:'')}
 function viewEvaluate(){
- const ms=h('select',{id:'model'},S.models.map(m=>h('option',{value:m.id,disabled:!m.configured,selected:m.default},(m.origin==='mock'?'[MOCK] ':'[REAL] ')+m.name+(m.model?' / '+m.model:'')+(m.configured?'':' (key not set)'))));
- const ss=h('select',{id:'suite'},S.suites.map(x=>h('option',{value:x.id},x.name+' v'+x.version+' ('+x.attacks+' attacks)')));
- const info=h('p',{class:'mut'});const upd=()=>{const m=S.models.find(x=>x.id===ms.value);const s=S.suites.find(x=>x.id===ss.value);info.replaceChildren(m?origin(m.origin):'',' ',m?m.flavor:'',' ',s?s.description:'')};ms.onchange=ss.onchange=upd;
- const hc=h('span',{class:'mut'});
- const check=async()=>{hc.textContent='Checking...';const r=await api('GET','/models/'+encodeURIComponent(ms.value)+'/health');hc.replaceChildren(...(r.status===200?[pill(r.data.status.replace(/_/g,' ').toUpperCase(),r.data.ok?'':'k'),' '+r.data.detail]:[why(r)]))};
- const run=async()=>{const r=await api('POST','/evaluations',{suite_id:ss.value,model:ms.value});if(r.status!==202)return flash('err',why(r));S.run=r.data;S.rows=[];S.view='evaluate';poll();render()};
+ const ms=h('select',{id:'model',onchange:()=>{S.sel=ms.value;paintModels();info()}},S.models.map(m=>h('option',{value:m.id,disabled:!m.configured,selected:(S.sel?S.sel===m.id:m.default)},(m.origin==='mock'?'[MOCK] ':'[REAL] ')+m.name+(m.model?' / '+m.model:'')+(m.configured?'':' (key not set)'))));
+ if(!S.sel||!S.models.some(m=>m.id===S.sel))S.sel=ms.value;
+ const ss=h('select',{id:'suite',onchange:()=>{info();if(S.explain)explainer($('#why'))}},S.suites.map(x=>h('option',{value:x.id},x.name+' v'+x.version+' ('+x.attacks+' attacks)')));
+ const run=async()=>{const r=await api('POST','/evaluations',{suite_id:ss.value,model:ms.value});if(r.status!==202)return flash('err',why(r));S.run=r.data;S.rows=[];S.seen=new Set();poll();render()};
+ const hc=h('span',{class:'mut',id:'hc'});
  shell(h('h2',null,'Evaluate a model'),
   tip('Step 1','Pick the model and the attack suite, then run it. The model you pick decides what the report is about.'),
-  h('div',{class:'row'},h('div',null,h('label',null,'Model'),ms),h('div',null,h('label',null,'Attack suite'),ss),h('button',{class:'b',onclick:check},'Test connection'),h('button',{class:'b p',id:'run',disabled:!!(S.run&&S.run.status==='running'),onclick:run},'Run evaluation')),
-  h('div',null,hc),info,
-  S.run?runPanel():h('p',{class:'mut'},'Evaluations run one at a time. A run takes a few seconds on the mock model and longer on a real one.'));upd()}
+  h('div',{class:'row'},h('div',null,h('label',{for:'model'},'Model'),ms),h('div',null,h('label',{for:'suite'},'Attack suite'),ss),
+   h('button',{class:'b',id:'tc',onclick:()=>check(ms.value).then(()=>{const x=S.health[ms.value];$('#hc').textContent=x?(x.status==='ok'?'OK: ':'')+x.detail:''})},'Test connection'),
+   h('button',{class:'b p',id:'run',disabled:!!(S.run&&S.run.status==='running'),onclick:run},'Run evaluation')),
+  h('div',null,hc),h('p',{class:'mut',id:'info'}),
+  h('h3',null,'Models'),h('p',{class:'mut'},'Read from this gateway\'s configuration. Availability is only known after a connection test.'),h('div',{class:'models',id:'catalog'}),
+  h('p',null,h('button',{class:'b s',id:'checkAll',onclick:async()=>{for(const m of S.models.filter(x=>x.configured))await check(m.id)}},'Check all models'),' ',
+   h('button',{class:'b s',id:'whyBtn','aria-expanded':String(S.explain),onclick:async()=>{S.explain=!S.explain;$('#whyBtn').setAttribute('aria-expanded',String(S.explain));$('#why').hidden=!S.explain;if(S.explain)await explainer($('#why'))}},'How this evaluation works')),
+  h('div',{id:'why',hidden:!S.explain}),
+  S.run?runPanel():h('p',{class:'mut'},'Evaluations run one at a time. A run takes a few seconds on the mock model and longer on a real one.'));
+ paintModels();info();if(S.explain)explainer($('#why'))}
 function poll(){stopPoll();S.timer=setInterval(async()=>{if(!S.run)return stopPoll();const[a,b]=await Promise.all([api('GET','/evaluations/'+S.run.run_id),api('GET','/evaluations/'+S.run.run_id+'/results')]);
- if(a.status!==200)return stopPoll();S.run=a.data;S.rows=b.data||[];if(S.run.status!=='running'){stopPoll();await load()}render()},1000)}
-const sc=(l,v,bad)=>h('div',{class:'card'+(bad?' bad':'')},h('span',null,l),h('b',null,v));
+ if(a.status!==200)return stopPoll();S.run=a.data;S.rows=b.data||[];if(S.run.status!=='running'){stopPoll();api('GET','/evaluations').then(r=>{S.runs=r.data||S.runs})}render()},1000)}
+const sc=(l,v,bad,i)=>h('div',{class:'card'+(bad?' bad':''),style:'--i:'+i},h('span',null,l),h('b',null,v));
 function runPanel(){const r=S.run;if(!r)return null;const sm=r.summary;
  const head=h('h3',null,'Run '+r.run_id,' ',origin(r.provider_kind),' ',pill(r.status.toUpperCase(),r.status==='completed'?'':'k'));
  const meta=h('p',{class:'mut'},(r.provider||'?')+' / '+(r.provider_model||r.model)+', suite '+r.suite.id+' v'+r.suite.version+', started '+when(r.created));
- if(r.status==='running')return h('div',null,head,meta,h('div',{class:'bar'},h('i',{style:'width:'+Math.round(100*r.done/Math.max(1,r.total))+'%'})),h('p',null,r.done+' of '+r.total+' cases done.'));
+ if(r.status==='running'){const dn=S.rows.filter(x=>x.kind==='control').length,at=S.rows.filter(x=>x.kind==='attack').length;
+  return h('div',null,head,meta,h('div',{class:'bar'},h('i',{style:'width:'+Math.round(100*r.done/Math.max(1,r.total))+'%'})),h('p',null,h('span',{class:'spin'}),' '+r.done+' of '+r.total+' cases done. Gateway controls: '+dn+'. Attack probes: '+at+'.'),resultsTable())}
  if(r.error)return h('div',null,head,meta,h('div',{class:'err'},'No attacks were sent. The provider failed its health check ('+r.error.status.replace(/_/g,' ')+'): '+r.error.detail+'. This is not a verdict about the model.'),runActions(r));
- const det=sm.by_judge.deterministic,hr=sm.by_judge.heuristic,n=o=>o.pass+o.fail+o.blocked+o.error;
- return h('div',null,head,meta,h('div',{class:'cards'},sc('Gateway controls (checked by code)',det.pass+' of '+n(det),det.fail>0),sc('Attack probes (heuristic)',hr.pass+' passed of '+n(hr)),sc('Probes flagged',hr.fail,hr.fail>0),sc('Errors or blocked',sm.errors+sm.blocked),sc('Audit chain',r.integrity&&r.integrity.audit.ok?'Verified':'Check',!(r.integrity&&r.integrity.audit.ok))),
+ const det=sm.by_judge.deterministic,hr=sm.by_judge.heuristic,n=o=>o.pass+o.fail+o.blocked+o.error,key='cards:'+r.run_id,pop=!S.popped.has(key);S.popped.add(key);
+ return h('div',null,head,meta,h('div',{class:'cards'+(pop?' pop':'')},sc('Gateway controls (checked by code)',det.pass+' of '+n(det),det.fail>0,0),sc('Attack probes (heuristic)',hr.pass+' passed of '+n(hr),false,1),sc('Probes flagged',hr.fail,hr.fail>0,2),sc('Errors or blocked',sm.errors+sm.blocked,false,3),sc('Audit chain',r.integrity&&r.integrity.audit.ok?'Verified':'Check',!(r.integrity&&r.integrity.audit.ok),4)),
   r.status==='completed'&&sm.failed?tip('Next','Flagged probes are signals for human review, not proof of a flaw. The report explains each one and what to consider.'):null,
-  runActions(r),resultsTable())}
+  runActions(r),verification(r),resultsTable())}
+function chip(label,state,detail,ok,i){return h('div',{class:'card'+(ok===false?' bad':''),style:'--i:'+i},h('span',null,label),h('b',null,state),h('span',null,detail))}
+function verification(r){const ig=r.integrity,db=r.db_check;if(!ig)return null;const a=ig.anchor,live=S.liveVerify;
+ const cs=[chip('Audit chain at the end of the run',ig.audit.ok?'Verified':'BROKEN',ig.audit.entries+' entries',ig.audit.ok,0),
+  chip('Independent anchor',a.status.replace(/_/g,' '),a.enabled?a.anchored+' of '+a.local+' entries copied':'no anchor service in this setup',a.status!=='tamper_detected',1),
+  chip('Stored results vs audit log',db&&db.digest_matches_audit?'Match':db&&db.audit_completed_event==='not_found'?'No completion entry':'MISMATCH','digest sealed in the audit log',!!(db&&db.digest_matches_audit),2)];
+ if(live)cs.push(chip('Live check now',live.ok?'Verified':'BROKEN',live.entries+' entries, anchor '+(live.anchor.enabled?live.anchor.anchored+' of '+live.anchor.local:'off'),live.ok,3));
+ return h('div',null,h('h3',null,'Verification'),h('div',{class:'cards pop'},cs),
+  isAdmin()?h('p',null,h('button',{class:'b s',onclick:async()=>{const v=await api('GET','/audit/verify');if(v.status===200){S.liveVerify=v.data;render()}}},'Verify the live audit log now')):null)}
 function runActions(r){return h('p',null,h('button',{class:'b p',onclick:()=>openReport(r.run_id)},'Open printable report'),' ',h('button',{class:'b',onclick:()=>download(r.run_id)},'Download evidence'))}
-function resultsTable(){if(!S.rows.length)return null;return h('div',{class:'scroll'},h('table',null,h('thead',null,h('tr',null,['#','Case','Category','Severity','Judge','Verdict','Latency'].map(x=>h('th',null,x)))),
- h('tbody',null,S.rows.map(x=>h('tr',{class:x.status==='fail'?'fl':''},h('td',null,x.seq),h('td',null,x.case_id),h('td',null,x.category.replace(/_/g,' ')),h('td',null,x.severity),h('td',null,x.judge==='deterministic'?'deterministic':'heuristic'),h('td',null,x.status==='fail'&&x.kind==='attack'?'FLAGGED':x.status.toUpperCase()),h('td',null,x.latency_ms==null?'-':x.latency_ms+' ms'))))))}
+function resultsTable(){if(!S.rows.length)return null;const fresh=S.rows.filter(x=>!S.seen.has(x.seq));fresh.forEach(x=>S.seen.add(x.seq));const newSet=new Set(fresh.map(x=>x.seq));
+ const trs=[];S.rows.forEach(x=>{const k=x.run_id+':'+x.seq,isOpen=!!S.open[k];
+  trs.push(h('tr',{class:'clk'+(x.status==='fail'?' fl':'')+(newSet.has(x.seq)&&S.run&&S.run.status==='running'?' new':''),tabindex:'0','aria-expanded':String(isOpen),onclick:()=>{S.open[k]=!isOpen;render()},onkeydown:e=>{if(e.key==='Enter')e.currentTarget.click()}},
+   h('td',null,x.seq),h('td',null,x.case_id),h('td',null,nm(x.category)),h('td',null,x.severity),h('td',null,x.judge),h('td',null,x.status==='fail'&&x.kind==='attack'?'FLAGGED':x.status.toUpperCase()),h('td',null,x.latency_ms==null?'-':x.latency_ms+' ms')));
+  if(isOpen)trs.push(h('tr',{class:'det'},h('td',{colspan:'7'},
+   h('p',null,h('b',null,x.judge==='deterministic'?'DETERMINISTIC control. ':'HEURISTIC probe. '),x.judge==='deterministic'?DET[x.status]||'':HEUR[x.status]||''),
+   h('p',null,h('b',null,'Expected: '),x.expected),h('p',null,h('b',null,'Verdict: '),x.detail),
+   x.response_excerpt?[h('b',null,'Model reply (first 200 characters)'),h('pre',null,x.response_excerpt)]:null,
+   h('details',null,h('summary',null,'Evidence'),h('pre',null,JSON.stringify(x.evidence,null,1))),
+   x.test_id?h('code',null,'test '+x.test_id+', reply sha256 '+String(x.response_sha256).slice(0,16)+'..., audit '+(x.audit_status||'n/a')+(x.audit_seq!=null?' #'+x.audit_seq:'')):null)))});
+ return h('div',{class:'scroll'},h('p',{class:'mut'},'Click a row for the details.'),h('table',null,h('thead',null,h('tr',null,['#','Case','Category','Severity','Judge','Verdict','Latency'].map(x=>h('th',null,x)))),h('tbody',null,trs)))}
 async function openReport(id){const w=window.open('','_blank');const r=await api('GET','/evaluations/'+id+'/report',null,true);if(!r.ok){if(w)w.close();return flash('err','Could not open the report ('+r.status+').')}
  const u=URL.createObjectURL(new Blob([await r.text()],{type:'text/html'}));if(w)w.location=u;else flash('err','Your browser blocked the report window. Allow pop-ups for this page.')}
 async function download(id){const r=await api('GET','/evaluations/'+id+'/evidence',null,true);if(!r.ok)return flash('err','Could not download the evidence ('+r.status+').');
  const u=URL.createObjectURL(new Blob([await r.text()],{type:'application/json'}));const a=h('a',{href:u,download:'bayora-evidence-'+id+'.json'});document.body.append(a);a.click();a.remove();flash('ok','Evidence saved. Check it offline with: python3 scripts/verify_evidence.py bayora-evidence-'+id+'.json')}
 
-/* ---------- runs ---------- */
-async function showRun(id){const[a,b]=await Promise.all([api('GET','/evaluations/'+id),api('GET','/evaluations/'+id+'/results')]);if(a.status!==200)return flash('err',why(a));S.run=a.data;S.rows=b.data||[];render()}
+async function showRun(id){const[a,b]=await Promise.all([api('GET','/evaluations/'+id),api('GET','/evaluations/'+id+'/results')]);if(a.status!==200)return flash('err',why(a));S.run=a.data;S.rows=b.data||[];S.rows.forEach(x=>S.seen.add(x.seq));render()}
 function viewRuns(){
  if(S.run)return shell(h('p',null,h('button',{class:'b s',onclick:()=>{S.run=null;render()}},'Back to the list')),runPanel());
  shell(h('h2',null,isAdmin()?'All runs':'My runs'),
@@ -134,10 +260,13 @@ function viewRuns(){
     h('td',null,r.status!=='running'?h('button',{class:'b s',onclick:e=>{e.stopPropagation();openReport(r.run_id)}},'Report'):null))))))
   :null)}
 
-/* ---------- admin ---------- */
-async function viewOverview(){const r=await api('GET','/admin/overview');if(r.status!==200)return shell(h('div',{class:'err'},why(r)));const o=r.data,a=o.audit;
+async function viewOverview(){const[r,en]=await Promise.all([api('GET','/admin/overview'),api('GET','/audit/entries?limit=8')]);if(r.status!==200)return shell(h('div',{class:'err'},why(r)));const o=r.data,a=o.audit,es=(en.data||[]).slice(-8);
+ const vb=h('button',{class:'b',id:'vbtn',onclick:async()=>{vb.disabled=true;const v=await api('GET','/audit/verify');vb.disabled=false;if(v.status===200){const d=v.data,an=d.anchor;$('#vres').replaceChildren(pill(d.ok?'CHAIN VERIFIED':'CHAIN BROKEN','k flip'),' ',pill(an.enabled?(an.conflict||an.anchored>an.local?'ANCHOR MISMATCH':'ANCHOR IN SYNC'):'NO ANCHOR','flip'),' '+d.entries+' entries'+(an.enabled?', anchored '+an.anchored+' of '+an.local+(an.pending?', pending '+an.pending:''):''))}}},'Verify now');
  shell(h('h2',null,'Overview'),tip('Tip','Everything here is read live from the gateway. A broken audit chain or an anchor mismatch means history was changed.'),
-  h('div',{class:'cards'},sc('Accounts',o.users.active+' active of '+o.users.total),sc('Administrators',o.users.admins),sc('Runs',o.runs.total),sc('Runs in 24 hours',o.runs.last_24h),sc('Audit chain',a.ok?'Verified':'BROKEN',!a.ok),sc('Anchor',a.anchor.status.replace(/_/g,' '),a.anchor.status==='tamper_detected'),sc('Audit entries',a.entries)),
+  h('div',{class:'cards pop'},[['Accounts',o.users.active+' active of '+o.users.total],['Administrators',o.users.admins],['Runs',o.runs.total],['Runs in 24 hours',o.runs.last_24h],['Audit chain',a.ok?'Verified':'BROKEN',!a.ok],['Anchor',a.anchor.status.replace(/_/g,' '),a.anchor.status==='tamper_detected'],['Audit entries',a.entries]].map(([l,v,b],i)=>sc(l,v,b,i))),
+  h('h3',null,'Audit chain (latest entries)'),h('p',{class:'mut'},'Each block shows the entry\'s sequence number, event and hash. Each hash commits to the previous one.'),
+  h('div',{class:'chain',id:'chain'},es.map((e,i)=>h('div',{class:'blk',style:'--i:'+i},h('b',null,'#'+e.seq+' '+e.event),h('br'),h('code',null,e.hash.slice(0,12)),h('br'),h('small',null,'prev '+e.prev.slice(0,8))))),
+  h('p',null,vb,' ',h('span',{id:'vres'})),
   h('h3',null,'Runs by status'),h('p',null,Object.entries(o.runs.by_status).map(([k,v])=>k+': '+v).join(', ')||'none'),
   h('h3',null,'Runs by origin'),h('p',null,Object.entries(o.runs.by_origin).map(([k,v])=>k+': '+v).join(', ')||'none'),
   h('h3',null,'Models'),h('table',null,h('tbody',null,o.models.map(m=>h('tr',null,h('td',null,m.name),h('td',null,origin(m.origin)),h('td',null,m.configured?'configured':'key not set'))))))}
@@ -154,15 +283,28 @@ async function viewUsers(){const r=await api('GET','/admin/users');if(r.status!=
      h('button',{class:'b s',onclick:()=>reset(u.username)},'Reset password'))))))),
   h('h3',null,'Create an account'),h('div',{class:'row'},h('div',null,h('label',null,'Username'),nu),h('div',null,h('label',null,'Password'),np),h('div',null,h('label',null,'Role'),nr),h('button',{class:'b p',onclick:add},'Create')))}
 
-/* ---------- account ---------- */
-function viewAccount(){const o=h('input',{type:'password',autocomplete:'current-password',maxlength:256}),n=h('input',{type:'password',autocomplete:'new-password',maxlength:256});
- const go=async()=>{const r=await api('POST','/auth/change-password',{old_password:o.value,new_password:n.value});if(r.status===200){setSession(r.data);o.value=n.value='';flash('ok','Password changed. Other sessions were signed out.')}else flash('err',why(r))};
- shell(h('h2',null,'Account'),h('p',null,'Signed in as ',h('b',null,S.user.username),' (',S.user.role,').'),h('h3',null,'Change password'),h('label',null,'Current password'),o,h('label',null,'New password'),n,h('p',null,h('button',{class:'b p',onclick:go},'Change password')),
-  h('p',{class:'mut'},'This tool screens a model with a small heuristic test suite. A report is not a security certification.'))}
+function viewAccount(){const p=S.profile||{};
+ const tabs=h('div',{class:'tabs',role:'tablist'},[['profile','Profile'],['security','Security'],['prefs','Preferences']].map(([k,l])=>h('button',{role:'tab','aria-selected':String(S.acct===k),class:S.acct===k?'on':'',onclick:()=>{S.acct=k;render()}},l)));
+ const save=async(body,msg)=>{const r=await api('PATCH','/auth/profile',body);if(r.status===200){S.profile=r.data;document.body.classList.toggle('rm',!!r.data.reduce_motion);nav();flash('ok',msg)}else flash('err',why(r))};
+ let panel;
+ if(S.acct==='profile'){const f={d:h('input',{id:'dn',maxlength:40,value:p.display_name||''}),n:h('input',{id:'nn',maxlength:24,value:p.nickname||''}),e:h('input',{id:'em',type:'email',maxlength:254,value:p.email||'',autocomplete:'email'}),b:h('textarea',{id:'bio',rows:3,maxlength:200},p.bio||'')};
+  panel=h('div',null,h('label',{for:'un'},'Username'),h('input',{id:'un',value:p.username||'',disabled:'true'}),h('p',{class:'mut'},'Your username and role can only be changed by an administrator.'),
+   h('label',{for:'dn'},'Display name'),f.d,h('label',{for:'nn'},'Nickname'),f.n,h('label',{for:'em'},'Email address'),f.e,
+   h('p',{class:'mut'},'Stored as account information only. Bayora does not send email, verify addresses or offer email password recovery. If you forget your password, an administrator must reset it.'),
+   h('label',{for:'bio'},'About you'),f.b,
+   h('p',null,h('button',{class:'b p',onclick:()=>save({display_name:f.d.value,nickname:f.n.value,email:f.e.value,bio:f.b.value},'Profile saved.')},'Save profile')))}
+ else if(S.acct==='security'){const o=h('input',{type:'password',autocomplete:'current-password',maxlength:256}),n=h('input',{type:'password',autocomplete:'new-password',maxlength:256});
+  const change=async()=>{const r=await api('POST','/auth/change-password',{old_password:o.value,new_password:n.value});if(r.status===200){setSession(r.data);o.value=n.value='';flash('ok','Password changed. Other sessions were signed out.')}else flash('err',why(r))};
+  panel=h('div',null,h('p',null,'Signed in as ',h('b',null,p.username),' ('+p.role+'). Last sign-in: '+when(p.last_login)+'.'),h('h3',null,'Change password'),h('p',{class:'mut'},'Changing it signs out every other session of this account.'),h('label',null,'Current password'),o,h('label',null,'New password'),n,h('p',null,h('button',{class:'b p',onclick:change},'Change password')))}
+ else{const a=h('input',{type:'checkbox',id:'su'}),b=h('input',{type:'checkbox',id:'rmo'});a.checked=!!p.show_username;b.checked=!!p.reduce_motion;
+  panel=h('div',null,h('label',{class:'inl'},a,h('span',null,'Show my username in the navigation. When off, my display name or nickname is shown instead.')),h('label',{class:'inl'},b,h('span',null,'Reduce animation. Bayora already follows your device setting; this turns motion down everywhere.')),
+   h('p',null,h('button',{class:'b p',onclick:()=>save({show_username:a.checked,reduce_motion:b.checked},'Preferences saved.')},'Save preferences')))}
+ shell(h('h2',null,'Account'),h('p',{class:'mut'},'This is your personal account. Administrator tools are separate.'),tabs,panel,h('p',{class:'mut',style:'margin-top:28px'},'Bayora screens a model with a small heuristic test suite. A report is not a security certification.'))}
 
 async function render(){
- if(!S.token){$('#nav').replaceChildren();return viewLoggedOut()}
+ if(!S.token){$('#app').className='';return S.view==='signin'?viewAuth():viewHome()}
  if(!S.user)await load();if(!S.token)return;
+ if(S.view==='home')return viewHome();
  ({evaluate:viewEvaluate,runs:viewRuns,overview:viewOverview,users:viewUsers,account:viewAccount}[S.view]||viewEvaluate)()}
 render();
 </script>

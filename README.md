@@ -225,6 +225,32 @@ carry a role and a version that are re-checked on every request, so disabling an
 changing/resetting its password ends its sessions immediately. Someone else's run id answers 404, not 403.
 Users cannot bring their own model or endpoint: models are configured by the operator in `models.json`.
 
+**Landing, navigation and account.** `/app` opens on the Bayora landing page (hero, About, Method, Try it, a
+guided tour). Signed-in users get Home, Evaluate, My Runs, Account; admins also get All Runs, Overview and Users.
+The navigation is only a convenience: every route is authorised by the server regardless of what the page shows.
+Account has three parts. *Profile*: display name, nickname, email, short bio. Email is stored as plain account
+information; Bayora sends no email, verifies no address and offers no email recovery (an admin resets passwords).
+*Security*: change password (signs out the account's other sessions). *Preferences*: show username or display
+name in the navigation, reduce animation. The profile route is `PATCH /auth/profile`: it always acts on the
+caller, takes no username, and rejects any body naming a field outside the six profile fields (role, active,
+scopes and the like), so nothing is half-applied. Admin account management stays under `/admin/users`.
+
+**What the evaluation tests.** *Evaluate* has a "How this evaluation works" panel built from the loaded suite
+definitions and the runner's control table (`GET /evaluation-info`), so it cannot drift from what actually runs.
+It separates HEURISTIC probes (jailbreak, prompt injection, instruction following, data exfiltration, policy
+bypass: a screen of the reply, a signal for human review, never proof) from DETERMINISTIC gateway controls
+(authentication, authorization, session isolation, phase gating, audit: checked by code). The model list shows
+each configured model with MOCK/REAL, provider, limits and availability (after a connection test); models come
+from `models.json`, and `gateway/models.example.json` has disabled Ollama examples to enable once pulled.
+
+**Printable report and the CSP.** The report opens as a `blob:` page, and a blob page inherits the opener's
+Content Security Policy. `/app`'s policy therefore lists, besides its own script's hash, the one fixed hash of the
+report's print-button script. There is no `unsafe-inline` and no `unsafe-eval`.
+
+Real-browser test (headless Chromium, no Docker): `cd tests && npm install puppeteer-core @sparticuz/chromium jsdom`,
+then `bash tests/browser_test.sh` (print button) and `bash tests/browser_test.sh browser_ui_test.js` (landing,
+app and admin at desktop, tablet and phone widths, with screenshots in `$SHOTS`).
+
 ## Evidence bundle and printable report
 
 For any finished run: `GET /evaluations/{id}/evidence` downloads a `bayora.evidence/1` JSON bundle (run, the exact
@@ -242,7 +268,7 @@ anchor comparison (the excerpt is sparse); those are shown as INFO from what the
 The bundle digest catches accidental edits, not a determined forger who recomputes it: the gateway's live check
 of the full chain and the independent anchor stay the authority.
 
-Tests: `python3 tests/accounts_test.py tests/evidence_test.py tests/app_page_test.py` (one at a time, no Docker);
+Tests: `python3 tests/accounts_test.py tests/profile_test.py tests/evidence_test.py tests/app_page_test.py` (one at a time, no Docker);
 browser-level: `bash tests/ui_app_test.sh` (needs Node + jsdom, not in CI).
 
 ## Demo UI (`/ui`) — demo only
